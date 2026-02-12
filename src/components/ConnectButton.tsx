@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
-import { WalletMultiButton } from '@demox-labs/aleo-wallet-adapter-reactui';
+import { useWalletModal } from '@demox-labs/aleo-wallet-adapter-reactui';
+import { DecryptPermission } from '@demox-labs/aleo-wallet-adapter-base';
 import { APP_NETWORK } from './WalletProvider';
 
 declare global {
@@ -12,7 +13,9 @@ declare global {
 }
 
 export default function ConnectButton() {
-  const { publicKey, connected } = useWallet();
+  const { publicKey, connected, connecting, wallets, select, connect, disconnect } = useWallet();
+  const { setVisible } = useWalletModal();
+  const [error, setError] = useState('');
 
   const accountLabel = useMemo(() => {
     if (!publicKey) return 'No account connected';
@@ -20,6 +23,33 @@ export default function ConnectButton() {
   }, [publicKey]);
 
   const hasExtension = typeof window !== 'undefined' && !!window.leoWallet;
+
+  const handleOpenWallet = async () => {
+    setError('');
+
+    if (connected) {
+      await disconnect();
+      return;
+    }
+
+    if (!hasExtension) {
+      window.open('https://leo.app/', '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    try {
+      if (wallets.length > 0) {
+        select(wallets[0].adapter.name);
+      }
+      setVisible(true);
+      // Fallback in case modal UI does not render in some environments.
+      await connect(DecryptPermission.UponRequest, APP_NETWORK);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Wallet connection failed');
+    }
+  };
+
+  const cta = connected ? 'Disconnect' : connecting ? 'Connecting...' : 'Connect Leo Wallet';
 
   return (
     <div className="flex items-center gap-2">
@@ -39,7 +69,15 @@ export default function ConnectButton() {
         </a>
       )}
 
-      <WalletMultiButton className="!h-10 !rounded-full !bg-white !text-zinc-900 !text-[13px] !font-semibold !px-4 hover:!opacity-90" />
+      <button
+        onClick={handleOpenWallet}
+        disabled={connecting}
+        className="px-4 py-2 rounded-full text-[13px] font-semibold bg-white text-zinc-900 disabled:opacity-40"
+      >
+        {cta}
+      </button>
+
+      {error ? <span className="text-[11px] text-rose-300 max-w-[220px] truncate">{error}</span> : null}
     </div>
   );
 }
