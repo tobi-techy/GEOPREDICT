@@ -1,17 +1,25 @@
-// The 'test_geopredict_contract' test program.
 import geopredict_contract.aleo;
 program test_geopredict_contract.aleo {
-    @test
-    script test_it() {
-        let result: u32 = geopredict_contract.aleo/main(1u32, 2u32);
-        assert_eq(result, 3u32);
+    transition keep_test_program_valid(public x: u8) -> u8 {
+        return x;
     }
 
     @test
-    @should_fail
-    transition do_nothing() {
-        let result: u32 = geopredict_contract.aleo/main(2u32, 3u32);
-        assert_eq(result, 3u32);
+    script payout_formula_sanity() {
+        let winner_pool: u64 = 1000u64;
+        let loser_pool: u64 = 400u64;
+        let stake: u64 = 100u64;
+        let payout: u64 = stake + ((stake * loser_pool) / winner_pool);
+        assert_eq(payout, 140u64);
+    }
+
+    @test
+    script zero_loser_pool_returns_stake() {
+        let winner_pool: u64 = 500u64;
+        let loser_pool: u64 = 0u64;
+        let stake: u64 = 25u64;
+        let payout: u64 = stake + ((stake * loser_pool) / winner_pool);
+        assert_eq(payout, 25u64);
     }
 
     @noupgrade

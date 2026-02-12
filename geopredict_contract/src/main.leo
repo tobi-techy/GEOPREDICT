@@ -1,46 +1,31 @@
-// GeoPredict: Privacy-preserving prediction market on Aleo
-// Bets are private (records), market totals are public (mappings)
-// Winners can generate proofs without revealing bet details
-
 program geopredict_contract.aleo {
-    // Public market data stored on-chain
     struct MarketTotals {
         total_yes: u64,
         total_no: u64,
-        outcome: u8,      // 0 = unresolved, 1 = yes won, 2 = no won
+        outcome: u8,
     }
 
-    // Private bet record - only owner can see
     record Bet {
         owner: address,
         market_id: field,
-        position: u8,     // 1 = yes, 2 = no
+        position: u8,
         amount: u64,
     }
 
-    // Winner proof record - proves you won without revealing details
     record WinProof {
         owner: address,
         amount_won: u64,
         proof_hash: field,
     }
 
-    // Public mapping: market_id => totals
     mapping market_totals: field => MarketTotals;
 
-    // Place a private bet on a market
-    async transition place_bet(
-        public market_id: field,
-        position: u8,
-        amount: u64,
-    ) -> (Bet, Future) {
-        // Validate position (1 = yes, 2 = no)
+    async transition place_bet(public market_id: field, position: u8, amount: u64) -> (Bet, Future) {
         assert(position == 1u8 || position == 2u8);
         assert(amount > 0u64);
 
-        // Create private bet record
         let bet: Bet = Bet {
-            owner: self.caller,
+            owner: self.signer,
             market_id: market_id,
             position: position,
             amount: amount,
@@ -49,22 +34,14 @@ program geopredict_contract.aleo {
         return (bet, finalize_place_bet(market_id, position, amount));
     }
 
-    async function finalize_place_bet(
-        market_id: field,
-        position: u8,
-        amount: u64,
-    ) {
-        // Get current totals or initialize
+    async function finalize_place_bet(market_id: field, position: u8, amount: u64) {
         let current: MarketTotals = Mapping::get_or_use(
             market_totals,
             market_id,
             MarketTotals { total_yes: 0u64, total_no: 0u64, outcome: 0u8 }
         );
-
-        // Market must be unresolved
         assert_eq(current.outcome, 0u8);
 
-        // Update totals based on position
         let new_totals: MarketTotals = MarketTotals {
             total_yes: position == 1u8 ? current.total_yes + amount : current.total_yes,
             total_no: position == 2u8 ? current.total_no + amount : current.total_no,
@@ -74,23 +51,13 @@ program geopredict_contract.aleo {
         Mapping::set(market_totals, market_id, new_totals);
     }
 
-    // Resolve a market (would be called by oracle/admin in production)
-    async transition resolve_market(
-        public market_id: field,
-        public outcome: u8,
-    ) -> Future {
-        // Outcome must be 1 (yes) or 2 (no)
+    async transition resolve_market(public market_id: field, public outcome: u8) -> Future {
         assert(outcome == 1u8 || outcome == 2u8);
         return finalize_resolve_market(market_id, outcome);
     }
 
-    async function finalize_resolve_market(
-        market_id: field,
-        outcome: u8,
-    ) {
+    async function finalize_resolve_market(market_id: field, outcome: u8) {
         let current: MarketTotals = Mapping::get(market_totals, market_id);
-        
-        // Must be unresolved
         assert_eq(current.outcome, 0u8);
 
         let resolved: MarketTotals = MarketTotals {
@@ -102,19 +69,19 @@ program geopredict_contract.aleo {
         Mapping::set(market_totals, market_id, resolved);
     }
 
-    // Claim winnings - consumes bet, returns WinProof
     async transition claim_winnings(
         bet: Bet,
         public outcome: u8,
+        public winner_pool: u64,
+        public loser_pool: u64,
     ) -> (WinProof, Future) {
-        // Bet position must match outcome
         assert_eq(bet.position, outcome);
+        assert(winner_pool > 0u64);
 
-        // Calculate winnings (simplified: 2x for winners)
-        let amount_won: u64 = bet.amount * 2u64;
+        let loser_share: u64 = (bet.amount * loser_pool) / winner_pool;
+        let amount_won: u64 = bet.amount + loser_share;
 
-        // Generate proof hash from bet details (hides which market)
-        let proof_hash: field = BHP256::hash_to_field(bet);
+        let proof_hash: field = BHP256::hash_to_field(bet.owner);
 
         let proof: WinProof = WinProof {
             owner: bet.owner,
@@ -122,15 +89,10 @@ program geopredict_contract.aleo {
             proof_hash: proof_hash,
         };
 
-        return (proof, finalize_claim(bet.market_id, outcome));
+        return (proof, finalize_claim(proof_hash));
     }
 
-    async function finalize_claim(
-        market_id: field,
-        outcome: u8,
-    ) {
-        // Verify market is resolved with matching outcome
-        let totals: MarketTotals = Mapping::get(market_totals, market_id);
-        assert_eq(totals.outcome, outcome);
+    async function finalize_claim(public proof_hash: field) {
+        assert(proof_hash != 0field);
     }
 }

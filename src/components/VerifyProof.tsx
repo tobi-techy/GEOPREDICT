@@ -12,14 +12,14 @@ export default function VerifyProof() {
     // Simulate verification delay
     setTimeout(() => {
       // In production, this would verify against on-chain data
-      setStatus(proofHash.startsWith('proof_') ? 'valid' : 'invalid');
+      setStatus(proofHash.startsWith('wp_') ? 'valid' : 'invalid');
     }, 1500);
   };
 
   return (
     <div className="bg-zinc-900/90 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-6">
       <h3 className="text-[15px] font-semibold text-white mb-1">Verify Winner</h3>
-      <p className="text-[13px] text-white/40 mb-4">Check if a proof hash is valid</p>
+      <p className="text-[13px] text-white/40 mb-4">Check if a win attestation ID is valid (reveals no market/bet details)</p>
       
       <input
         type="text"
