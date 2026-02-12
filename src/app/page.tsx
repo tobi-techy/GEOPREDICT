@@ -6,7 +6,7 @@ import { AleoWalletProvider } from '@/components/WalletProvider';
 import ConnectButton from '@/components/ConnectButton';
 import MarketPanel from '@/components/MarketPanel';
 import VerifyProof from '@/components/VerifyProof';
-import { DEMO_BALANCE_UNITS, fromTokenUnits, formatToken } from '@/lib/token';
+import { TOKEN } from '@/lib/token';
 import { type Market } from '@/lib/markets';
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
@@ -14,7 +14,6 @@ const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 export default function Home() {
   const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
   const [showVerify, setShowVerify] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
 
   return (
     <AleoWalletProvider>
@@ -25,13 +24,13 @@ export default function Home() {
               <span className="text-sm">🗺</span>
             </div>
             <span className="text-[15px] font-semibold text-white tracking-tight">GeoPredict</span>
-            <span className="text-[11px] text-white/35">Balance: {formatToken(fromTokenUnits(DEMO_BALANCE_UNITS), true)} {demoMode ? '(demo)' : ''}</span>
+            <span className="text-[11px] text-white/35">Settlement token: {TOKEN.symbol}</span>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => setShowVerify(!showVerify)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
               Verify Proof
             </button>
-            <ConnectButton onDemoModeChange={setDemoMode} />
+            <ConnectButton />
           </div>
         </header>
 

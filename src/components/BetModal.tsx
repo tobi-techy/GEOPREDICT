@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
 import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
-import { type Market, calcParimutuelPayout, calcTradeImpact } from '@/lib/markets';
-import { formatToken, toTokenUnits } from '@/lib/token';
+import { type Market } from '@/lib/markets';
+import { toTokenUnits } from '@/lib/token';
 import { APP_NETWORK } from './WalletProvider';
 
 const PROGRAM_ID = 'geopredict_contract.aleo';
@@ -22,17 +22,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
   const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   const [error, setError] = useState('');
 
-  const amountNum = Number(amount || 0);
-  const payoutPreview = useMemo(
-    () => calcParimutuelPayout({ market, position, stake: Math.max(0, amountNum) }),
-    [amountNum, market, position]
-  );
-  const tradeImpact = useMemo(
-    () => calcTradeImpact({ market, position, stake: Math.max(0, amountNum) }),
-    [amountNum, market, position]
-  );
-
-  const isDemo = typeof window !== 'undefined' && window.localStorage.getItem('geopredict-demo-mode') === '1';
+  // Pricing previews moved out of the modal UI for cleaner UX.
 
   const handleBet = async () => {
     const parsedUnits = toTokenUnits(amount);
@@ -41,17 +31,8 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       return;
     }
 
-    if (isDemo) {
-      setStatus('success');
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 1200);
-      return;
-    }
-
     if (!publicKey || !requestTransaction) {
-      setError('Connect Leo wallet or enable Demo mode');
+      setError('Connect Leo wallet to place a bet');
       return;
     }
 
@@ -99,13 +80,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
                 </div>
               </div>
 
-              <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] text-[12px] text-white/70 space-y-1">
-                <p>Payout formula: stake + (stake / winner pool) × loser pool</p>
-                <p>Estimated payout: <span className="text-emerald-300">{formatToken(payoutPreview.payout)}</span></p>
-                <p>Est. profit: <span className="text-emerald-300">{formatToken(payoutPreview.profit)}</span></p>
-                <p>Implied odds: {tradeImpact.beforeOdds}% → {tradeImpact.afterOdds}% (impact {tradeImpact.slippagePct}%)</p>
-                <p>Pool depth: {formatToken(tradeImpact.poolDepth, true)}</p>
-              </div>
+              {/* pricing details intentionally hidden in modal */}
 
               {error && <p className="text-rose-400/80 text-sm text-center">{error}</p>}
               <div className="flex gap-3 pt-2">
