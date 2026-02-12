@@ -1,8 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { type Market, calcOdds, formatAmount } from '@/lib/markets';
-import { formatToken } from '@/lib/token';
+import { useState } from 'react';
+import { type Market, calcOdds } from '@/lib/markets';
 import BetModal from './BetModal';
 import ClaimModal from './ClaimModal';
 
@@ -15,13 +14,10 @@ export default function MarketPanel({ market, onClose }: MarketPanelProps) {
   const [betPosition, setBetPosition] = useState<1 | 2 | null>(null);
   const [showClaim, setShowClaim] = useState(false);
   const odds = calcOdds(market);
-  const total = market.totalYes + market.totalNo;
+  // total liquidity value intentionally hidden in sidebar.
   const isResolved = market.outcome !== 0;
 
-  const liquidity = useMemo(
-    () => ({ yes: market.totalYes, no: market.totalNo, depth: total }),
-    [market.totalNo, market.totalYes, total]
-  );
+  // sidebar liquidity breakdown intentionally hidden per UX preference.
 
   return (
     <>
@@ -32,13 +28,7 @@ export default function MarketPanel({ market, onClose }: MarketPanelProps) {
           <h2 className="text-[22px] font-semibold text-white tracking-tight mt-3 pr-8 leading-tight">{market.question}</h2>
           <p className="text-[13px] text-white/30 mt-3">Resolves {market.deadline.toLocaleDateString()}</p>
 
-          <div className="mt-5 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] text-[12px] text-white/65 space-y-1">
-            <p>Liquidity pools</p>
-            <p>YES pool: {formatToken(liquidity.yes, true)}</p>
-            <p>NO pool: {formatToken(liquidity.no, true)}</p>
-            <p>Total depth: {formatToken(liquidity.depth, true)}</p>
-            <p>AMM-like implied odds from pool ratio (higher side = higher implied probability).</p>
-          </div>
+          {/* liquidity details moved out of sidebar for cleaner UI */}
 
           {isResolved ? (
             <>
@@ -59,7 +49,7 @@ export default function MarketPanel({ market, onClose }: MarketPanelProps) {
                   <div className="bg-emerald-500 h-full" style={{ width: `${odds.yes}%` }} />
                   <div className="bg-rose-500 h-full" style={{ width: `${odds.no}%` }} />
                 </div>
-                <p className="text-[12px] text-white/25 mt-3">{formatAmount(total)} total liquidity</p>
+                {/* liquidity text hidden */}
               </div>
 
               <div className="mt-8 space-y-3">
