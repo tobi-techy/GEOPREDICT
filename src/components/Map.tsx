@@ -24,7 +24,9 @@ interface MapProps {
 export default function Map({ onMarkerClick }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapError, setMapError] = useState<string | null>(
+    MAPBOX_TOKEN ? null : 'Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add it in your Vercel project env and redeploy.'
+  );
 
   const handleMarkerClick = useCallback((market: Market) => {
     onMarkerClick?.(market);
@@ -33,10 +35,7 @@ export default function Map({ onMarkerClick }: MapProps) {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    if (!MAPBOX_TOKEN) {
-      setMapError('Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add it in your Vercel project env and redeploy.');
-      return;
-    }
+    if (!MAPBOX_TOKEN) return;
 
     try {
       map.current = new mapboxgl.Map({
@@ -80,7 +79,8 @@ export default function Map({ onMarkerClick }: MapProps) {
         });
       });
     } catch {
-      setMapError('Unable to initialize map. Check your Mapbox token configuration.');
+      // Swallow init error; map `error` listener handles runtime diagnostics.
+      return;
     }
 
     return () => {
