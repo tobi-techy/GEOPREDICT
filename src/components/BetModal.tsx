@@ -32,8 +32,6 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     [amountNum, market, position]
   );
 
-  const isDemo = typeof window !== 'undefined' && window.localStorage.getItem('geopredict-demo-mode') === '1';
-
   const handleBet = async () => {
     const parsedUnits = toTokenUnits(amount);
     if (parsedUnits <= 0) {
@@ -41,17 +39,8 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       return;
     }
 
-    if (isDemo) {
-      setStatus('success');
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 1200);
-      return;
-    }
-
     if (!publicKey || !requestTransaction) {
-      setError('Connect Leo wallet or enable Demo mode');
+      setError('Connect Leo wallet to place a bet');
       return;
     }
 

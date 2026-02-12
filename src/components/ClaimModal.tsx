@@ -26,30 +26,26 @@ export default function ClaimModal({ market, onClose }: ClaimModalProps) {
     [market]
   );
 
-  const isDemo = typeof window !== 'undefined' && window.localStorage.getItem('geopredict-demo-mode') === '1';
-
   const handleClaim = async () => {
-    if (!isDemo && (!publicKey || !requestTransaction)) {
-      setError('Connect wallet or use Demo mode');
+    if (!publicKey || !requestTransaction) {
+      setError('Connect Leo wallet to claim winnings');
       return;
     }
 
     setStatus('pending');
     try {
-      if (!isDemo && publicKey && requestTransaction) {
-        const privateBetRecordPlaceholder = '{owner:address.private,market_id:field.private,position:u8.private,amount:u64.private,_nonce:group.public}';
-        const winnerPool = market.outcome === 1 ? market.totalYes : market.totalNo;
-        const loserPool = market.outcome === 1 ? market.totalNo : market.totalYes;
-        const tx = Transaction.createTransaction(
-          publicKey,
-          APP_NETWORK,
-          PROGRAM_ID,
-          'claim_winnings',
-          [privateBetRecordPlaceholder, `${market.outcome}u8`, `${winnerPool}u64`, `${loserPool}u64`],
-          50_000,
-        );
-        await requestTransaction(tx);
-      }
+      const privateBetRecordPlaceholder = '{owner:address.private,market_id:field.private,position:u8.private,amount:u64.private,_nonce:group.public}';
+      const winnerPool = market.outcome === 1 ? market.totalYes : market.totalNo;
+      const loserPool = market.outcome === 1 ? market.totalNo : market.totalYes;
+      const tx = Transaction.createTransaction(
+        publicKey,
+        APP_NETWORK,
+        PROGRAM_ID,
+        'claim_winnings',
+        [privateBetRecordPlaceholder, `${market.outcome}u8`, `${winnerPool}u64`, `${loserPool}u64`],
+        50_000,
+      );
+      await requestTransaction(tx);
 
       const opaqueProof = `wp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
       setProofHash(opaqueProof);
