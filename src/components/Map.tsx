@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { MOCK_MARKETS, calcOdds, type Market, type MarketCategory } from '@/lib/markets';
 
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
+mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const MARKER_COLORS: Record<MarketCategory, string> = {
   real_estate: '#60a5fa',
@@ -23,6 +24,7 @@ interface MapProps {
 export default function Map({ onMarkerClick }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   const handleMarkerClick = useCallback((market: Market) => {
     onMarkerClick?.(market);
@@ -31,42 +33,55 @@ export default function Map({ onMarkerClick }: MapProps) {
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: [-20, 25],
-      zoom: 1.8,
-    });
+    if (!MAPBOX_TOKEN) {
+      setMapError('Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add it in your Vercel project env and redeploy.');
+      return;
+    }
 
-    map.current.on('load', () => {
-      MOCK_MARKETS.forEach((market) => {
-        const color = MARKER_COLORS[market.category];
-        const odds = calcOdds(market);
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [-20, 25],
+        zoom: 1.8,
+      });
 
-        const popup = new mapboxgl.Popup({ 
-          offset: 25, 
-          closeButton: false,
-        }).setHTML(`
-          <div style="background:#18181b;color:#fafafa;padding:12px;border-radius:12px;min-width:200px;font-family:system-ui,sans-serif;">
-            <p style="font-size:11px;color:#71717a;margin-bottom:4px;text-transform:uppercase;">${market.category.replace('_', ' ')}</p>
-            <p style="font-size:13px;font-weight:500;margin-bottom:8px;">${market.question}</p>
-            <div style="display:flex;gap:12px;font-size:12px;">
-              <span style="color:#34d399;">Yes ${odds.yes}%</span>
-              <span style="color:#fb7185;">No ${odds.no}%</span>
+      map.current.on('error', () => {
+        setMapError('Map failed to load. Check NEXT_PUBLIC_MAPBOX_TOKEN and domain restrictions.');
+      });
+
+      map.current.on('load', () => {
+        MOCK_MARKETS.forEach((market) => {
+          const color = MARKER_COLORS[market.category];
+          const odds = calcOdds(market);
+
+          const popup = new mapboxgl.Popup({
+            offset: 25,
+            closeButton: false,
+          }).setHTML(`
+            <div style="background:#18181b;color:#fafafa;padding:12px;border-radius:12px;min-width:200px;font-family:system-ui,sans-serif;">
+              <p style="font-size:11px;color:#71717a;margin-bottom:4px;text-transform:uppercase;">${market.category.replace('_', ' ')}</p>
+              <p style="font-size:13px;font-weight:500;margin-bottom:8px;">${market.question}</p>
+              <div style="display:flex;gap:12px;font-size:12px;">
+                <span style="color:#34d399;">Yes ${odds.yes}%</span>
+                <span style="color:#fb7185;">No ${odds.no}%</span>
+              </div>
             </div>
-          </div>
-        `);
+          `);
 
-        const marker = new mapboxgl.Marker({ color })
-          .setLngLat([market.lng, market.lat])
-          .setPopup(popup)
-          .addTo(map.current!);
+          const marker = new mapboxgl.Marker({ color })
+            .setLngLat([market.lng, market.lat])
+            .setPopup(popup)
+            .addTo(map.current!);
 
-        marker.getElement().addEventListener('click', () => {
-          handleMarkerClick(market);
+          marker.getElement().addEventListener('click', () => {
+            handleMarkerClick(market);
+          });
         });
       });
-    });
+    } catch {
+      setMapError('Unable to initialize map. Check your Mapbox token configuration.');
+    }
 
     return () => {
       map.current?.remove();
@@ -87,7 +102,16 @@ export default function Map({ onMarkerClick }: MapProps) {
           border-top-color: #18181b !important;
         }
       `}</style>
-      <div ref={mapContainer} className="w-full h-full" />
+      {mapError ? (
+        <div className="w-full h-full bg-zinc-950 text-zinc-100 flex items-center justify-center p-6 text-center">
+          <div>
+            <p className="font-semibold mb-2">Map configuration error</p>
+            <p className="text-sm text-zinc-400">{mapError}</p>
+          </div>
+        </div>
+      ) : (
+        <div ref={mapContainer} className="w-full h-full" />
+      )}
     </>
   );
 }
