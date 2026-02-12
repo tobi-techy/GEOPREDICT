@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
-import { DecryptPermission } from '@demox-labs/aleo-wallet-adapter-base';
+import { WalletMultiButton } from '@demox-labs/aleo-wallet-adapter-reactui';
 import { APP_NETWORK } from './WalletProvider';
 
 declare global {
@@ -12,41 +12,14 @@ declare global {
 }
 
 export default function ConnectButton() {
-  const { publicKey, connected, connecting, connect, disconnect, wallets, select } = useWallet();
-  const [hasExtension, setHasExtension] = useState(false);
-
-  useEffect(() => {
-    const check = () => setHasExtension(typeof window !== 'undefined' && !!window.leoWallet);
-    check();
-    const t = setTimeout(check, 800);
-    return () => clearTimeout(t);
-  }, []);
+  const { publicKey, connected } = useWallet();
 
   const accountLabel = useMemo(() => {
     if (!publicKey) return 'No account connected';
     return `${publicKey.slice(0, 10)}...${publicKey.slice(-8)}`;
   }, [publicKey]);
 
-  const handleConnect = async () => {
-    if (connected) {
-      await disconnect();
-      return;
-    }
-
-    if (!hasExtension) {
-      window.open('https://leo.app/', '_blank', 'noopener,noreferrer');
-      return;
-    }
-
-    if (wallets.length > 0) {
-      select(wallets[0].adapter.name);
-      await new Promise((r) => setTimeout(r, 150));
-    }
-
-    await connect(DecryptPermission.UponRequest, APP_NETWORK);
-  };
-
-  const cta = connected ? 'Disconnect' : connecting ? 'Connecting...' : 'Connect Leo Wallet';
+  const hasExtension = typeof window !== 'undefined' && !!window.leoWallet;
 
   return (
     <div className="flex items-center gap-2">
@@ -55,7 +28,7 @@ export default function ConnectButton() {
         <div className="font-mono">{accountLabel}</div>
       </div>
 
-      {!hasExtension && (
+      {!hasExtension && !connected && (
         <a
           href="https://leo.app/"
           target="_blank"
@@ -66,13 +39,7 @@ export default function ConnectButton() {
         </a>
       )}
 
-      <button
-        onClick={handleConnect}
-        disabled={connecting}
-        className="px-4 py-2 rounded-full text-[13px] font-semibold bg-white text-zinc-900 disabled:opacity-40"
-      >
-        {cta}
-      </button>
+      <WalletMultiButton className="!h-10 !rounded-full !bg-white !text-zinc-900 !text-[13px] !font-semibold !px-4 hover:!opacity-90" />
     </div>
   );
 }
