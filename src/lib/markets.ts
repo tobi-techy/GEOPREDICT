@@ -1,6 +1,16 @@
-import { formatToken } from './token';
+import { formatToken } from "./token";
 
-export type MarketCategory = 'real_estate' | 'event' | 'environmental' | 'music' | 'sports' | 'crypto';
+export const ALEO_API = "https://api.explorer.provable.com/v1/testnet";
+export const DEPLOYED_PROGRAM = "geopredict_contract.aleo";
+export const DEPLOY_TX_ID = "at19jv50x5nuwpunnamgup8hp5ypvcrjpgtf9fjtsg6upfc9mgceygstf083x";
+
+export type MarketCategory =
+  | "real_estate"
+  | "event"
+  | "environmental"
+  | "music"
+  | "sports"
+  | "crypto";
 
 export interface Market {
   id: string;
@@ -29,15 +39,114 @@ export interface WinProof {
 }
 
 export const MOCK_MARKETS: Market[] = [
-  { id: '1', fieldId: '1field', lat: 37.7749, lng: -122.4194, category: 'real_estate', question: 'Will SF median home price exceed $1.5M by Q2 2026?', deadline: new Date('2026-06-30'), totalYes: 15000, totalNo: 8500, outcome: 0 },
-  { id: '2', fieldId: '2field', lat: 40.7484, lng: -73.9857, category: 'music', question: 'Will Taylor Swift announce NYC concert in 2026?', deadline: new Date('2026-12-31'), totalYes: 32000, totalNo: 12000, outcome: 0 },
-  { id: '3', fieldId: '3field', lat: 51.5074, lng: -0.1276, category: 'sports', question: 'Will Arsenal win Premier League 2025-26?', deadline: new Date('2026-05-25'), totalYes: 28000, totalNo: 35000, outcome: 0 },
-  { id: '4', fieldId: '4field', lat: 35.6895, lng: 139.6917, category: 'crypto', question: 'Will Bitcoin exceed $200k before Tokyo halving event?', deadline: new Date('2028-04-01'), totalYes: 45000, totalNo: 22000, outcome: 0 },
-  { id: '5', fieldId: '5field', lat: -22.9068, lng: -43.1729, category: 'event', question: 'Will Rio Carnival 2026 break attendance records?', deadline: new Date('2026-02-17'), totalYes: 8900, totalNo: 6100, outcome: 0 },
-  { id: '6', fieldId: '6field', lat: 25.7617, lng: -80.1918, category: 'sports', question: 'Will Miami host Super Bowl 2027?', deadline: new Date('2026-05-01'), totalYes: 18000, totalNo: 24000, outcome: 0 },
-  { id: '7', fieldId: '7field', lat: 52.52, lng: 13.405, category: 'music', question: 'Will Berlin host Eurovision 2027?', deadline: new Date('2026-09-01'), totalYes: 9500, totalNo: 14500, outcome: 0 },
-  { id: '8', fieldId: '8field', lat: 1.3521, lng: 103.8198, category: 'crypto', question: 'Will Singapore approve spot ETH ETF by 2026?', deadline: new Date('2026-12-31'), totalYes: 21000, totalNo: 19000, outcome: 1 },
-  { id: '9', fieldId: '9field', lat: 55.7558, lng: 37.6173, category: 'environmental', question: 'Will Moscow see record snowfall winter 2026?', deadline: new Date('2026-03-01'), totalYes: 7200, totalNo: 11800, outcome: 0 },
+  {
+    id: "1",
+    fieldId: "1field",
+    lat: 37.7749,
+    lng: -122.4194,
+    category: "real_estate",
+    question: "Will SF median home price exceed $1.5M by Q2 2026?",
+    deadline: new Date("2026-06-30"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "2",
+    fieldId: "2field",
+    lat: 40.7484,
+    lng: -73.9857,
+    category: "music",
+    question: "Will Taylor Swift announce NYC concert in 2026?",
+    deadline: new Date("2026-12-31"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "3",
+    fieldId: "3field",
+    lat: 51.5074,
+    lng: -0.1276,
+    category: "sports",
+    question: "Will Arsenal win Premier League 2025-26?",
+    deadline: new Date("2026-05-25"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "4",
+    fieldId: "4field",
+    lat: 35.6895,
+    lng: 139.6917,
+    category: "crypto",
+    question: "Will Bitcoin exceed $200k before Tokyo halving event?",
+    deadline: new Date("2028-04-01"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "5",
+    fieldId: "5field",
+    lat: -22.9068,
+    lng: -43.1729,
+    category: "event",
+    question: "Will Rio Carnival 2027 break attendance records?",
+    deadline: new Date("2027-02-16"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "6",
+    fieldId: "6field",
+    lat: 25.7617,
+    lng: -80.1918,
+    category: "sports",
+    question: "Will Miami host Super Bowl 2027?",
+    deadline: new Date("2026-05-01"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "7",
+    fieldId: "7field",
+    lat: 52.52,
+    lng: 13.405,
+    category: "music",
+    question: "Will Berlin host Eurovision 2027?",
+    deadline: new Date("2026-09-01"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "8",
+    fieldId: "8field",
+    lat: 1.3521,
+    lng: 103.8198,
+    category: "crypto",
+    question: "Will Singapore approve spot ETH ETF by 2026?",
+    deadline: new Date("2026-12-31"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
+  {
+    id: "9",
+    fieldId: "9field",
+    lat: 55.7558,
+    lng: 37.6173,
+    category: "environmental",
+    question: "Will Moscow see record snowfall winter 2026?",
+    deadline: new Date("2026-03-01"),
+    totalYes: 0,
+    totalNo: 0,
+    outcome: 0,
+  },
 ];
 
 export function getMarketById(id: string): Market | undefined {
@@ -57,7 +166,12 @@ export function calcParimutuelPayout(params: {
   market: Market;
   position: 1 | 2;
   stake: number;
-}): { payout: number; profit: number; winnerPoolAfter: number; loserPoolAfter: number } {
+}): {
+  payout: number;
+  profit: number;
+  winnerPoolAfter: number;
+  loserPoolAfter: number;
+} {
   const { market, position, stake } = params;
   const winnerPoolBefore = position === 1 ? market.totalYes : market.totalNo;
   const loserPoolBefore = position === 1 ? market.totalNo : market.totalYes;
@@ -98,7 +212,10 @@ export function calcTradeImpact(params: {
   const nextTotal = nextYes + nextNo;
 
   const beforeOdds = position === 1 ? before.yes : before.no;
-  const afterOdds = nextTotal === 0 ? 50 : Math.round(((position === 1 ? nextYes : nextNo) / nextTotal) * 100);
+  const afterOdds =
+    nextTotal === 0
+      ? 50
+      : Math.round(((position === 1 ? nextYes : nextNo) / nextTotal) * 100);
 
   return {
     beforeOdds,
@@ -113,19 +230,49 @@ export function formatAmount(amount: number): string {
 }
 
 export const CATEGORY_COLORS: Record<MarketCategory, string> = {
-  real_estate: 'bg-blue-400',
-  event: 'bg-purple-400',
-  environmental: 'bg-teal-400',
-  music: 'bg-pink-400',
-  sports: 'bg-orange-400',
-  crypto: 'bg-yellow-400',
+  real_estate: "bg-blue-400",
+  event: "bg-purple-400",
+  environmental: "bg-teal-400",
+  music: "bg-pink-400",
+  sports: "bg-orange-400",
+  crypto: "bg-yellow-400",
 };
 
 export const CATEGORY_LABELS: Record<MarketCategory, string> = {
-  real_estate: '🏠 Real Estate',
-  event: '🎉 Event',
-  environmental: '🌊 Environmental',
-  music: '🎵 Music',
-  sports: '⚽ Sports',
-  crypto: '₿ Crypto',
+  real_estate: "🏠 Real Estate",
+  event: "🎉 Event",
+  environmental: "🌊 Environmental",
+  music: "🎵 Music",
+  sports: "⚽ Sports",
+  crypto: "₿ Crypto",
 };
+
+export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: number; totalNo: number; outcome: 0 | 1 | 2 } | null> {
+  try {
+    const res = await fetch(`${ALEO_API}/program/${DEPLOYED_PROGRAM}/mapping/market_totals/${fieldId}`);
+    const raw = await res.text();
+    if (!raw || raw === 'null') return null;
+    const cleaned = raw.replace(/"/g, '');
+    const yesMatch = cleaned.match(/total_yes:\s*(\d+)u64/);
+    const noMatch = cleaned.match(/total_no:\s*(\d+)u64/);
+    const outcomeMatch = cleaned.match(/outcome:\s*(\d+)u8/);
+    if (!yesMatch || !noMatch || !outcomeMatch) return null;
+    return {
+      totalYes: Number(yesMatch[1]),
+      totalNo: Number(noMatch[1]),
+      outcome: Number(outcomeMatch[1]) as 0 | 1 | 2,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAllMarketTotals(markets: Market[]): Promise<Market[]> {
+  const updated = await Promise.all(
+    markets.map(async (m) => {
+      const totals = await fetchMarketTotals(m.fieldId);
+      return totals ? { ...m, ...totals } : m;
+    }),
+  );
+  return updated;
+}

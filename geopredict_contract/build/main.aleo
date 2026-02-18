@@ -20,6 +20,10 @@ mapping market_totals:
     key as field.public;
     value as MarketTotals.public;
 
+mapping admin_set:
+    key as u8.public;
+    value as address.public;
+
 function place_bet:
     input r0 as field.public;
     input r1 as u8.private;
@@ -58,16 +62,19 @@ function resolve_market:
     is.eq r1 2u8 into r3;
     or r2 r3 into r4;
     assert.eq r4 true;
-    async resolve_market r0 r1 into r5;
+    async resolve_market self.caller r0 r1 into r5;
     output r5 as geopredict_contract.aleo/resolve_market.future;
 
 finalize resolve_market:
-    input r0 as field.public;
-    input r1 as u8.public;
-    get market_totals[r0] into r2;
-    assert.eq r2.outcome 0u8;
-    cast r2.total_yes r2.total_no r1 into r3 as MarketTotals;
-    set r3 into market_totals[r0];
+    input r0 as address.public;
+    input r1 as field.public;
+    input r2 as u8.public;
+    get admin_set[0u8] into r3;
+    assert.eq r0 r3;
+    get market_totals[r1] into r4;
+    assert.eq r4.outcome 0u8;
+    cast r4.total_yes r4.total_no r2 into r5 as MarketTotals;
+    set r5 into market_totals[r1];
 
 function claim_winnings:
     input r0 as Bet.record;
@@ -82,11 +89,26 @@ function claim_winnings:
     add r0.amount r6 into r7;
     hash.bhp256 r0.owner into r8 as field;
     cast r0.owner r7 r8 into r9 as WinProof.record;
-    async claim_winnings r8 into r10;
+    async claim_winnings r0.market_id r1 r2 r3 r8 into r10;
     output r9 as WinProof.record;
     output r10 as geopredict_contract.aleo/claim_winnings.future;
 
 finalize claim_winnings:
     input r0 as field.public;
-    is.neq r0 0field into r1;
-    assert.eq r1 true;
+    input r1 as u8.public;
+    input r2 as u64.public;
+    input r3 as u64.public;
+    input r4 as field.public;
+    is.neq r4 0field into r5;
+    assert.eq r5 true;
+    get market_totals[r0] into r6;
+    assert.eq r6.outcome r1;
+    is.eq r1 1u8 into r7;
+    ternary r7 r6.total_yes r6.total_no into r8;
+    ternary r7 r6.total_no r6.total_yes into r9;
+    assert.eq r2 r8;
+    assert.eq r3 r9;
+
+constructor:
+    set program_owner into admin_set[0u8];
+

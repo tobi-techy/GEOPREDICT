@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { MOCK_MARKETS, calcOdds, type Market, type MarketCategory } from '@/lib/markets';
@@ -24,18 +24,14 @@ interface MapProps {
 export default function Map({ onMarkerClick }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const onMarkerClickRef = useRef(onMarkerClick);
+  onMarkerClickRef.current = onMarkerClick;
   const [mapError, setMapError] = useState<string | null>(
     MAPBOX_TOKEN ? null : 'Missing NEXT_PUBLIC_MAPBOX_TOKEN. Add it in your Vercel project env and redeploy.'
   );
 
-  const handleMarkerClick = useCallback((market: Market) => {
-    onMarkerClick?.(market);
-  }, [onMarkerClick]);
-
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
-
-    if (!MAPBOX_TOKEN) return;
+    if (!mapContainer.current || map.current || !MAPBOX_TOKEN) return;
 
     try {
       map.current = new mapboxgl.Map({
@@ -74,12 +70,11 @@ export default function Map({ onMarkerClick }: MapProps) {
             .addTo(map.current!);
 
           marker.getElement().addEventListener('click', () => {
-            handleMarkerClick(market);
+            onMarkerClickRef.current?.(market);
           });
         });
       });
     } catch {
-      // Swallow init error; map `error` listener handles runtime diagnostics.
       return;
     }
 
@@ -87,7 +82,7 @@ export default function Map({ onMarkerClick }: MapProps) {
       map.current?.remove();
       map.current = null;
     };
-  }, [handleMarkerClick]);
+  }, []);
 
   return (
     <>

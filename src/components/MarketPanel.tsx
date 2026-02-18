@@ -1,23 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import { type Market, calcOdds } from '@/lib/markets';
+import { type Market, calcOdds, formatAmount } from '@/lib/markets';
 import BetModal from './BetModal';
 import ClaimModal from './ClaimModal';
 
 interface MarketPanelProps {
   market: Market;
   onClose: () => void;
+  onBetPlaced?: (position: 1 | 2, stake: number) => void;
 }
 
-export default function MarketPanel({ market, onClose }: MarketPanelProps) {
+export default function MarketPanel({ market, onClose, onBetPlaced }: MarketPanelProps) {
   const [betPosition, setBetPosition] = useState<1 | 2 | null>(null);
   const [showClaim, setShowClaim] = useState(false);
   const odds = calcOdds(market);
-  // total liquidity value intentionally hidden in sidebar.
+  const poolDepth = market.totalYes + market.totalNo;
   const isResolved = market.outcome !== 0;
-
-  // sidebar liquidity breakdown intentionally hidden per UX preference.
 
   return (
     <>
@@ -28,7 +27,11 @@ export default function MarketPanel({ market, onClose }: MarketPanelProps) {
           <h2 className="text-[22px] font-semibold text-white tracking-tight mt-3 pr-8 leading-tight">{market.question}</h2>
           <p className="text-[13px] text-white/30 mt-3">Resolves {market.deadline.toLocaleDateString()}</p>
 
-          {/* liquidity details moved out of sidebar for cleaner UI */}
+          <div className="mt-4 flex gap-3 text-[12px]">
+            <span className="px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/50">Pool: {formatAmount(poolDepth)}</span>
+            <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">Yes: {formatAmount(market.totalYes)}</span>
+            <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">No: {formatAmount(market.totalNo)}</span>
+          </div>
 
           {isResolved ? (
             <>
@@ -49,7 +52,6 @@ export default function MarketPanel({ market, onClose }: MarketPanelProps) {
                   <div className="bg-emerald-500 h-full" style={{ width: `${odds.yes}%` }} />
                   <div className="bg-rose-500 h-full" style={{ width: `${odds.no}%` }} />
                 </div>
-                {/* liquidity text hidden */}
               </div>
 
               <div className="mt-8 space-y-3">
@@ -60,12 +62,19 @@ export default function MarketPanel({ market, onClose }: MarketPanelProps) {
           )}
 
           <div className="mt-8 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
-            <p className="text-[13px] text-white/50 leading-relaxed">Private by default: market pools are public, your position and amount remain private records.</p>
+            <p className="text-[13px] text-white/50 leading-relaxed">Private by default: market pools are public, your position and amount remain private records on Aleo.</p>
           </div>
         </div>
       </div>
 
-      {betPosition && <BetModal market={market} position={betPosition} onClose={() => setBetPosition(null)} onSuccess={() => setBetPosition(null)} />}
+      {betPosition && (
+        <BetModal
+          market={market}
+          position={betPosition}
+          onClose={() => setBetPosition(null)}
+          onSuccess={(stake) => { setBetPosition(null); onBetPlaced?.(betPosition, stake); }}
+        />
+      )}
       {showClaim && <ClaimModal market={market} onClose={() => setShowClaim(false)} />}
     </>
   );

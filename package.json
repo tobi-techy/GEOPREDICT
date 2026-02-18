@@ -1,6 +1,6 @@
 {
   "name": "geopredict_aleo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,10 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@demox-labs/aleo-wallet-adapter-base": "^0.0.23",
-    "@demox-labs/aleo-wallet-adapter-leo": "^0.0.25",
-    "@demox-labs/aleo-wallet-adapter-react": "^0.0.22",
-    "@demox-labs/aleo-wallet-adapter-reactui": "^0.0.36",
+    "@provablehq/aleo-wallet-adaptor-core": "latest",
+    "@provablehq/aleo-wallet-adaptor-react": "latest",
+    "@provablehq/aleo-wallet-adaptor-react-ui": "latest",
+    "@provablehq/aleo-wallet-adaptor-shield": "latest",
+    "@provablehq/aleo-types": "latest",
     "mapbox-gl": "^3.18.1",
     "next": "16.1.5",
     "react": "19.2.3",

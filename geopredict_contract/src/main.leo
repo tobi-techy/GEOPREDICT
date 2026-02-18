@@ -19,6 +19,12 @@ program geopredict_contract.aleo {
     }
 
     mapping market_totals: field => MarketTotals;
+    mapping admin_set: u8 => address;
+
+    @custom
+    async constructor() {
+        Mapping::set(admin_set, 0u8, self.program_owner);
+    }
 
     async transition place_bet(public market_id: field, position: u8, amount: u64) -> (Bet, Future) {
         assert(position == 1u8 || position == 2u8);
@@ -53,10 +59,13 @@ program geopredict_contract.aleo {
 
     async transition resolve_market(public market_id: field, public outcome: u8) -> Future {
         assert(outcome == 1u8 || outcome == 2u8);
-        return finalize_resolve_market(market_id, outcome);
+        return finalize_resolve_market(self.caller, market_id, outcome);
     }
 
-    async function finalize_resolve_market(market_id: field, outcome: u8) {
+    async function finalize_resolve_market(caller: address, market_id: field, outcome: u8) {
+        let admin: address = Mapping::get(admin_set, 0u8);
+        assert_eq(caller, admin);
+
         let current: MarketTotals = Mapping::get(market_totals, market_id);
         assert_eq(current.outcome, 0u8);
 
@@ -89,10 +98,24 @@ program geopredict_contract.aleo {
             proof_hash: proof_hash,
         };
 
-        return (proof, finalize_claim(proof_hash));
+        return (proof, finalize_claim(bet.market_id, outcome, winner_pool, loser_pool, proof_hash));
     }
 
-    async function finalize_claim(public proof_hash: field) {
+    async function finalize_claim(
+        market_id: field,
+        outcome: u8,
+        winner_pool: u64,
+        loser_pool: u64,
+        proof_hash: field,
+    ) {
         assert(proof_hash != 0field);
+
+        let totals: MarketTotals = Mapping::get(market_totals, market_id);
+        assert_eq(totals.outcome, outcome);
+
+        let expected_winner: u64 = outcome == 1u8 ? totals.total_yes : totals.total_no;
+        let expected_loser: u64 = outcome == 1u8 ? totals.total_no : totals.total_yes;
+        assert_eq(winner_pool, expected_winner);
+        assert_eq(loser_pool, expected_loser);
     }
 }

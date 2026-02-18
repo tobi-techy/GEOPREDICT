@@ -1,13 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useWallet } from '@demox-labs/aleo-wallet-adapter-react';
-import { Transaction } from '@demox-labs/aleo-wallet-adapter-base';
-import { type Market, calcParimutuelPayout } from '@/lib/markets';
-import { formatToken } from '@/lib/token';
-import { APP_NETWORK } from './WalletProvider';
-
-const PROGRAM_ID = 'geopredict_contract.aleo';
+import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
+import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
+import { type Market, calcParimutuelPayout, formatAmount } from '@/lib/markets';
+import { PROGRAM_ID } from './WalletProvider';
 
 interface ClaimModalProps {
   market: Market;
@@ -15,44 +12,42 @@ interface ClaimModalProps {
 }
 
 export default function ClaimModal({ market, onClose }: ClaimModalProps) {
-  const { publicKey, requestTransaction } = useWallet();
+  const { connected, address, executeTransaction } = useWallet();
   const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
-  const [proofHash, setProofHash] = useState('');
+  const [txId, setTxId] = useState('');
   const [error, setError] = useState('');
+  const [stakeInput, setStakeInput] = useState('');
 
-  const simulatedStake = 100;
+  const stakeNum = Number(stakeInput) || 0;
   const settlement = useMemo(
-    () => calcParimutuelPayout({ market, position: market.outcome as 1 | 2, stake: simulatedStake }),
-    [market]
+    () => stakeNum > 0 ? calcParimutuelPayout({ market, position: market.outcome as 1 | 2, stake: stakeNum }) : null,
+    [market, stakeNum],
   );
 
   const handleClaim = async () => {
-    if (!publicKey || !requestTransaction) {
-      setError('Connect Leo wallet to claim winnings');
-      return;
-    }
+    if (!connected || !address) { setError('Connect wallet first'); return; }
 
     setStatus('pending');
     try {
-      const privateBetRecordPlaceholder = '{owner:address.private,market_id:field.private,position:u8.private,amount:u64.private,_nonce:group.public}';
       const winnerPool = market.outcome === 1 ? market.totalYes : market.totalNo;
       const loserPool = market.outcome === 1 ? market.totalNo : market.totalYes;
-      const tx = Transaction.createTransaction(
-        publicKey,
-        APP_NETWORK,
-        PROGRAM_ID,
-        'claim_winnings',
-        [privateBetRecordPlaceholder, `${market.outcome}u8`, `${winnerPool}u64`, `${loserPool}u64`],
-        50_000,
-      );
-      await requestTransaction(tx);
-
-      const opaqueProof = `wp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-      setProofHash(opaqueProof);
+      const result = await executeTransaction({
+        program: PROGRAM_ID,
+        function: 'claim_winnings',
+        inputs: [
+          // The wallet will prompt the user to select their Bet record
+          'bet_record',
+          `${market.outcome}u8`,
+          `${winnerPool}u64`,
+          `${loserPool}u64`,
+        ],
+        fee: 50_000,
+      });
+      setTxId(result?.transactionId ?? 'submitted');
       setStatus('success');
     } catch (err) {
       setStatus('error');
-      setError(err instanceof Error ? err.message : 'Failed');
+      setError(err instanceof Error ? err.message : 'Transaction failed');
     }
   };
 
@@ -61,44 +56,66 @@ export default function ClaimModal({ market, onClose }: ClaimModalProps) {
       <div className="bg-zinc-900/95 backdrop-blur-2xl border border-white/[0.08] rounded-3xl p-8 w-full max-w-sm mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         {status === 'idle' && (
           <>
-            <div className="text-center mb-8">
+            <div className="text-center mb-6">
               <h3 className="text-xl font-semibold text-white tracking-tight">Claim Winnings</h3>
               <p className="text-sm text-white/60 mt-2">Outcome: {market.outcome === 1 ? 'Yes' : 'No'}</p>
             </div>
-            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04] mb-4 text-[12px] text-white/60 space-y-1">
-              <p>Settlement details (parimutuel):</p>
-              <p>Stake sample: {formatToken(simulatedStake)}</p>
-              <p>Payout = stake + proportional loser pool share</p>
-              <p>Estimated claim: {formatToken(settlement.payout)}</p>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Your stake (preview payout)</label>
+              <input type="number" min="0" step="0.01" value={stakeInput} onChange={(e) => setStakeInput(e.target.value)} placeholder="Enter stake to preview"
+                className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-all" />
             </div>
+
+            {settlement && (
+              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04] mb-4 text-[12px] text-white/60 space-y-1">
+                <div className="flex justify-between"><span>Stake</span><span className="text-white/80">{formatAmount(stakeNum)}</span></div>
+                <div className="flex justify-between"><span>Est. payout</span><span className="text-white/80">{formatAmount(settlement.payout)}</span></div>
+                <div className="flex justify-between"><span>Est. profit</span><span className="text-emerald-400">+{formatAmount(settlement.profit)}</span></div>
+                <p className="text-[11px] text-white/30 pt-1 border-t border-white/[0.04]">payout = stake + (stake / winner_pool) × loser_pool</p>
+              </div>
+            )}
+
             <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04] mb-6">
               <p className="text-[13px] text-white/40 leading-relaxed">
-                Privacy: only an opaque win attestation ID is displayed here. We do not render market ID, raw bet record, or wallet-linked bet data in public UI.
+                Privacy: your bet record is consumed privately. Only an opaque proof hash is finalized on-chain.
               </p>
             </div>
             {error && <p className="text-rose-400/80 text-sm text-center mb-4">{error}</p>}
             <div className="flex gap-3">
               <button onClick={onClose} className="flex-1 py-4 bg-white/[0.05] hover:bg-white/[0.08] rounded-2xl font-medium text-white/60 transition-all">Cancel</button>
-              <button onClick={handleClaim} className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 rounded-2xl font-medium text-white transition-all">Claim</button>
+              {connected ? (
+                <button onClick={handleClaim} className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 rounded-2xl font-medium text-white transition-all">Claim</button>
+              ) : (
+                <div className="flex-1"><WalletMultiButton /></div>
+              )}
             </div>
           </>
         )}
 
-        {status === 'pending' && <p className="text-center text-white/70 py-12">Generating zero-knowledge claim proof...</p>}
+        {status === 'pending' && <p className="text-center text-white/70 py-12">Submitting claim to Aleo Testnet...</p>}
 
         {status === 'success' && (
           <div className="text-center py-8">
             <p className="text-white font-medium mb-1">Winnings Claimed</p>
-            <p className="text-white/30 text-sm mb-6">Attestation ID (safe to share)</p>
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 mb-4">
-              <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Win Attestation</p>
-              <p className="text-[13px] text-white/80 font-mono break-all">{proofHash}</p>
-            </div>
-            <button onClick={() => navigator.clipboard.writeText(proofHash)} className="px-6 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-sm text-white/60 transition-all">Copy ID</button>
+            <p className="text-white/30 text-sm mb-6">Transaction submitted on-chain</p>
+            {txId && (
+              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 mb-4">
+                <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Transaction ID</p>
+                <p className="text-[13px] text-white/80 font-mono break-all">{txId}</p>
+              </div>
+            )}
+            <button onClick={onClose} className="px-6 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-sm text-white/60 transition-all">Close</button>
           </div>
         )}
 
-        {status === 'error' && <p className="text-center text-rose-300 py-12">{error}</p>}
+        {status === 'error' && (
+          <div className="text-center py-12">
+            <p className="text-white font-medium">Transaction Failed</p>
+            <p className="text-white/30 text-sm mt-1">{error}</p>
+            <button onClick={() => setStatus('idle')} className="mt-6 px-6 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-sm text-white/60 transition-all">Try Again</button>
+          </div>
+        )}
       </div>
     </div>
   );
