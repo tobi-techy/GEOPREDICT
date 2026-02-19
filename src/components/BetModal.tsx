@@ -38,6 +38,8 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
   const [status, setStatus] = useState<'idle' | 'pending' | 'confirming' | 'success' | 'error'>('idle');
   const [error, setError] = useState('');
   const [txId, setTxId] = useState('');
+  const [usePrivateFee, setUsePrivateFee] = useState(false);
+  const [feeNotice, setFeeNotice] = useState('');
 
   const stakeNum = Number(amount) || 0;
   const bettingClosed = market.outcome !== 0;
@@ -64,6 +66,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
 
     setStatus('pending');
     setError('');
+    setFeeNotice('');
     try {
       const resolveStakeRecord = async (): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number }> => {
         const availableCreditsRecords = await requestRecords('credits.aleo', true);
@@ -129,13 +132,23 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       }
 
       const inputs = [stakeRecord, market.fieldId, `${position}u8`, `${parsedUnits}u64`];
-      const result = await executeTransaction({
+      const submitBet = async (privateFee: boolean) => executeTransaction({
         program: PROGRAM_ID,
         function: 'place_bet',
         inputs,
         fee: 50_000,
-        privateFee: false,
+        privateFee,
       });
+
+      let result;
+      try {
+        result = await submitBet(usePrivateFee);
+      } catch (txErr) {
+        if (!usePrivateFee) throw txErr;
+        // Fall back to public fee if a private fee record is unavailable.
+        result = await submitBet(false);
+        setFeeNotice('Private fee record unavailable. Used public fee fallback for this bet.');
+      }
       const id = result?.transactionId ?? '';
       setTxId(id);
       setStatus('confirming');
@@ -193,6 +206,19 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
                 </div>
               )}
 
+              <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+                <input
+                  type="checkbox"
+                  checked={usePrivateFee}
+                  onChange={(e) => setUsePrivateFee(e.target.checked)}
+                  className="mt-0.5 accent-emerald-500"
+                />
+                <span className="text-[12px] text-white/45 leading-relaxed">
+                  Use private fee for stronger metadata privacy. If unavailable, app will retry with public fee.
+                </span>
+              </label>
+
+              {feeNotice && <p className="text-amber-300/80 text-[12px] text-center">{feeNotice}</p>}
               {error && <p className="text-rose-400/80 text-sm text-center">{error}</p>}
               <div className="flex gap-3 pt-2">
                 <button onClick={onClose} className="flex-1 py-4 bg-white/[0.05] hover:bg-white/[0.08] rounded-2xl font-medium text-white/60 transition-all">Cancel</button>

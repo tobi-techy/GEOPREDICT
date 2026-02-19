@@ -6,12 +6,20 @@ import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { type Market, calcParimutuelPayout, formatAmount } from '@/lib/markets';
 import { PROGRAM_ID } from './WalletProvider';
 import { toMicrocredits } from '@/lib/token';
-import { pickBetRecord } from '@/lib/aleoRecords';
+import { extractRecordAmountMicrocredits, pickBetRecord } from '@/lib/aleoRecords';
 
 interface ClaimModalProps {
   market: Market;
   stakeHint: number;
   onClose: () => void;
+}
+
+function makePrivateNonceField(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let value = BigInt(0);
+  for (const b of bytes) value = (value << BigInt(8)) + BigInt(b);
+  return `${value}field`;
 }
 
 export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalProps) {
@@ -20,6 +28,8 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
   const [txId, setTxId] = useState('');
   const [error, setError] = useState('');
   const [stakeInput, setStakeInput] = useState(() => (stakeHint > 0 ? String(Number(stakeHint.toFixed(2))) : ''));
+  const [usePrivateFee, setUsePrivateFee] = useState(false);
+  const [feeNotice, setFeeNotice] = useState('');
 
   const stakeNum = Number(stakeInput) || 0;
   const settlement = useMemo(
@@ -33,6 +43,7 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
 
     setStatus('pending');
     setError('');
+    setFeeNotice('');
     try {
       const winnerPool = market.outcome === 1 ? market.totalYes : market.totalNo;
       const loserPool = market.outcome === 1 ? market.totalNo : market.totalYes;
@@ -55,18 +66,42 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
         return;
       }
 
-      const result = await executeTransaction({
+      const parsedStakeUnits = extractRecordAmountMicrocredits(betRecord);
+      const fallbackStakeUnits = toMicrocredits(stakeInput);
+      const stakeUnits = parsedStakeUnits ?? fallbackStakeUnits;
+      if (stakeUnits <= 0) {
+        setStatus('error');
+        setError('Unable to infer stake from selected bet record. Enter your exact winning stake to compute claim.');
+        return;
+      }
+
+      const loserShare = (BigInt(stakeUnits) * BigInt(loserPoolUnits)) / BigInt(winnerPoolUnits);
+      const expectedPayout = BigInt(stakeUnits) + loserShare;
+      const claimNonce = makePrivateNonceField();
+
+      const inputs = [
+        betRecord,
+        `${market.outcome}u8`,
+        `${expectedPayout}u64`,
+        claimNonce,
+      ];
+
+      const submitClaim = async (privateFee: boolean) => executeTransaction({
         program: PROGRAM_ID,
         function: 'claim_winnings',
-        inputs: [
-          betRecord,
-          `${market.outcome}u8`,
-          `${winnerPoolUnits}u64`,
-          `${loserPoolUnits}u64`,
-        ],
+        inputs,
         fee: 50_000,
-        privateFee: false,
+        privateFee,
       });
+
+      let result;
+      try {
+        result = await submitClaim(usePrivateFee);
+      } catch (txErr) {
+        if (!usePrivateFee) throw txErr;
+        result = await submitClaim(false);
+        setFeeNotice('Private fee record unavailable. Used public fee fallback for this claim.');
+      }
       setTxId(result?.transactionId ?? 'submitted');
       setStatus('success');
     } catch (err) {
@@ -102,9 +137,21 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
 
             <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04] mb-6">
               <p className="text-[13px] text-white/40 leading-relaxed">
-                Privacy: your winning bet record is consumed privately and a new private credits record is minted as payout.
+                Privacy: claim derives payout from on-chain market totals, consumes your private bet record, and mints a private payout record.
               </p>
             </div>
+            <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] mb-4">
+              <input
+                type="checkbox"
+                checked={usePrivateFee}
+                onChange={(e) => setUsePrivateFee(e.target.checked)}
+                className="mt-0.5 accent-emerald-500"
+              />
+              <span className="text-[12px] text-white/45 leading-relaxed">
+                Use private fee for stronger metadata privacy. If unavailable, app will retry with public fee.
+              </span>
+            </label>
+            {feeNotice && <p className="text-amber-300/80 text-[12px] text-center mb-2">{feeNotice}</p>}
             {error && <p className="text-rose-400/80 text-sm text-center mb-4">{error}</p>}
             <div className="flex gap-3">
               <button onClick={onClose} className="flex-1 py-4 bg-white/[0.05] hover:bg-white/[0.08] rounded-2xl font-medium text-white/60 transition-all">Cancel</button>
