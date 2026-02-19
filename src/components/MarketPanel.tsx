@@ -8,24 +8,46 @@ import ClaimModal from './ClaimModal';
 interface MarketPanelProps {
   market: Market;
   onClose: () => void;
+  myYesStake?: number;
+  myNoStake?: number;
   onBetPlaced?: (position: 1 | 2, stake: number) => void;
 }
 
-export default function MarketPanel({ market, onClose, onBetPlaced }: MarketPanelProps) {
+export default function MarketPanel({ market, onClose, myYesStake = 0, myNoStake = 0, onBetPlaced }: MarketPanelProps) {
   const [betPosition, setBetPosition] = useState<1 | 2 | null>(null);
   const [showClaim, setShowClaim] = useState(false);
   const odds = calcOdds(market);
   const poolDepth = market.totalYes + market.totalNo;
   const isResolved = market.outcome !== 0;
+  const winningStake = market.outcome === 1 ? myYesStake : market.outcome === 2 ? myNoStake : 0;
+  const canClaim = isResolved;
 
   return (
     <>
-      <div className="absolute right-0 top-0 h-full w-[380px] bg-zinc-950/95 backdrop-blur-2xl border-l border-white/[0.06] overflow-y-auto">
+      <div className="fixed right-0 top-[120px] h-[calc(100vh-120px)] w-[380px] bg-zinc-950/95 backdrop-blur-2xl border-l border-white/[0.06] overflow-y-auto z-30">
         <div className="p-6">
           <button onClick={onClose} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.05] hover:bg-white/[0.1] transition-all">×</button>
 
           <h2 className="text-[22px] font-semibold text-white tracking-tight mt-3 pr-8 leading-tight">{market.question}</h2>
           <p className="text-[13px] text-white/30 mt-3">Resolves {market.deadline.toLocaleDateString()}</p>
+          {market.source && (
+            <p className="text-[12px] text-white/35 mt-1">
+              Source: <span className="text-white/55">{market.source}</span>
+              {market.sourceUrl && (
+                <>
+                  {' · '}
+                  <a
+                    href={market.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-emerald-300/90 hover:text-emerald-200 underline underline-offset-2"
+                  >
+                    Open market
+                  </a>
+                </>
+              )}
+            </p>
+          )}
 
           <div className="mt-4 flex gap-3 text-[12px]">
             <span className="px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/50">Pool: {formatAmount(poolDepth)}</span>
@@ -38,8 +60,16 @@ export default function MarketPanel({ market, onClose, onBetPlaced }: MarketPane
               <div className="mt-6 p-5 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
                 <p className="text-[11px] font-medium text-white/30 uppercase tracking-wider">Outcome</p>
                 <p className="text-2xl font-semibold text-white mt-2">{market.outcome === 1 ? '✓ Yes' : '✗ No'}</p>
+                <p className="text-[12px] text-white/40 mt-2">Your winning stake: {formatAmount(winningStake)}</p>
               </div>
-              <button onClick={() => setShowClaim(true)} className="w-full mt-4 py-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-2xl font-medium text-amber-400 transition-all">🏆 Claim Winnings</button>
+              <button
+                onClick={() => setShowClaim(true)}
+                disabled={!canClaim}
+                className="w-full mt-4 py-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-2xl font-medium text-amber-400 transition-all disabled:opacity-50"
+              >
+                🏆 Claim Winnings
+              </button>
+              <p className="text-[12px] text-white/35 mt-2">Claim uses wallet bet records. Local stake shown above is only a browser-side hint.</p>
             </>
           ) : (
             <>
@@ -63,6 +93,7 @@ export default function MarketPanel({ market, onClose, onBetPlaced }: MarketPane
 
           <div className="mt-8 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04]">
             <p className="text-[13px] text-white/50 leading-relaxed">Private by default: market pools are public, your position and amount remain private records on Aleo.</p>
+            <p className="text-[12px] text-white/35 mt-2">Your local stake tracker: Yes {formatAmount(myYesStake)} · No {formatAmount(myNoStake)}</p>
           </div>
         </div>
       </div>
@@ -75,7 +106,7 @@ export default function MarketPanel({ market, onClose, onBetPlaced }: MarketPane
           onSuccess={(stake) => { setBetPosition(null); onBetPlaced?.(betPosition, stake); }}
         />
       )}
-      {showClaim && <ClaimModal market={market} onClose={() => setShowClaim(false)} />}
+      {showClaim && <ClaimModal market={market} stakeHint={winningStake} onClose={() => setShowClaim(false)} />}
     </>
   );
 }

@@ -1,4 +1,5 @@
-program geopredict_contract.aleo;
+import credits.aleo;
+program geopredict_private_v2.aleo;
 
 record Bet:
     owner as address.private;
@@ -25,35 +26,41 @@ mapping admin_set:
     value as address.public;
 
 function place_bet:
-    input r0 as field.public;
-    input r1 as u8.private;
-    input r2 as u64.private;
-    is.eq r1 1u8 into r3;
-    is.eq r1 2u8 into r4;
-    or r3 r4 into r5;
-    assert.eq r5 true;
-    gt r2 0u64 into r6;
+    input r0 as credits.aleo/credits.record;
+    input r1 as field.public;
+    input r2 as u8.public;
+    input r3 as u64.public;
+    assert.eq r0.owner self.signer;
+    is.eq r2 1u8 into r4;
+    is.eq r2 2u8 into r5;
+    or r4 r5 into r6;
     assert.eq r6 true;
-    cast self.signer r0 r1 r2 into r7 as Bet.record;
-    async place_bet r0 r1 r2 into r8;
-    output r7 as Bet.record;
-    output r8 as geopredict_contract.aleo/place_bet.future;
+    gt r3 0u64 into r7;
+    assert.eq r7 true;
+    call credits.aleo/transfer_private_to_public r0 geopredict_private_v2.aleo r3 into r8 r9;
+    cast self.signer r1 r2 r3 into r10 as Bet.record;
+    async place_bet r1 r2 r3 r9 into r11;
+    output r10 as Bet.record;
+    output r8 as credits.aleo/credits.record;
+    output r11 as geopredict_private_v2.aleo/place_bet.future;
 
 finalize place_bet:
     input r0 as field.public;
     input r1 as u8.public;
     input r2 as u64.public;
-    cast 0u64 0u64 0u8 into r3 as MarketTotals;
-    get.or_use market_totals[r0] r3 into r4;
-    assert.eq r4.outcome 0u8;
-    is.eq r1 1u8 into r5;
-    add r4.total_yes r2 into r6;
-    ternary r5 r6 r4.total_yes into r7;
-    is.eq r1 2u8 into r8;
-    add r4.total_no r2 into r9;
-    ternary r8 r9 r4.total_no into r10;
-    cast r7 r10 0u8 into r11 as MarketTotals;
-    set r11 into market_totals[r0];
+    input r3 as credits.aleo/transfer_private_to_public.future;
+    await r3;
+    cast 0u64 0u64 0u8 into r4 as MarketTotals;
+    get.or_use market_totals[r0] r4 into r5;
+    assert.eq r5.outcome 0u8;
+    is.eq r1 1u8 into r6;
+    add r5.total_yes r2 into r7;
+    ternary r6 r7 r5.total_yes into r8;
+    is.eq r1 2u8 into r9;
+    add r5.total_no r2 into r10;
+    ternary r9 r10 r5.total_no into r11;
+    cast r8 r11 0u8 into r12 as MarketTotals;
+    set r12 into market_totals[r0];
 
 function resolve_market:
     input r0 as field.public;
@@ -63,7 +70,7 @@ function resolve_market:
     or r2 r3 into r4;
     assert.eq r4 true;
     async resolve_market self.caller r0 r1 into r5;
-    output r5 as geopredict_contract.aleo/resolve_market.future;
+    output r5 as geopredict_private_v2.aleo/resolve_market.future;
 
 finalize resolve_market:
     input r0 as address.public;
@@ -81,33 +88,44 @@ function claim_winnings:
     input r1 as u8.public;
     input r2 as u64.public;
     input r3 as u64.public;
+    assert.eq self.signer r0.owner;
+    is.eq r1 1u8 into r4;
+    is.eq r1 2u8 into r5;
+    or r4 r5 into r6;
+    assert.eq r6 true;
     assert.eq r0.position r1;
-    gt r2 0u64 into r4;
-    assert.eq r4 true;
-    mul r0.amount r3 into r5;
-    div r5 r2 into r6;
-    add r0.amount r6 into r7;
-    hash.bhp256 r0.owner into r8 as field;
-    cast r0.owner r7 r8 into r9 as WinProof.record;
-    async claim_winnings r0.market_id r1 r2 r3 r8 into r10;
-    output r9 as WinProof.record;
-    output r10 as geopredict_contract.aleo/claim_winnings.future;
+    gt r2 0u64 into r7;
+    assert.eq r7 true;
+    mul r0.amount r3 into r8;
+    div r8 r2 into r9;
+    add r0.amount r9 into r10;
+    hash.bhp256 r0.owner into r11 as field;
+    is.eq r0.position 1u8 into r12;
+    ternary r12 1field 2field into r13;
+    add r11 r0.market_id into r14;
+    add r14 r13 into r15;
+    hash.bhp256 r15 into r16 as field;
+    call credits.aleo/transfer_public_to_private r0.owner r10 into r17 r18;
+    cast r0.owner r10 r16 into r19 as WinProof.record;
+    async claim_winnings r0.market_id r1 r2 r3 r18 into r20;
+    output r19 as WinProof.record;
+    output r17 as credits.aleo/credits.record;
+    output r20 as geopredict_private_v2.aleo/claim_winnings.future;
 
 finalize claim_winnings:
     input r0 as field.public;
     input r1 as u8.public;
     input r2 as u64.public;
     input r3 as u64.public;
-    input r4 as field.public;
-    is.neq r4 0field into r5;
-    assert.eq r5 true;
-    get market_totals[r0] into r6;
-    assert.eq r6.outcome r1;
-    is.eq r1 1u8 into r7;
-    ternary r7 r6.total_yes r6.total_no into r8;
-    ternary r7 r6.total_no r6.total_yes into r9;
-    assert.eq r2 r8;
-    assert.eq r3 r9;
+    input r4 as credits.aleo/transfer_public_to_private.future;
+    get market_totals[r0] into r5;
+    assert.eq r5.outcome r1;
+    is.eq r1 1u8 into r6;
+    ternary r6 r5.total_yes r5.total_no into r7;
+    ternary r6 r5.total_no r5.total_yes into r8;
+    assert.eq r2 r7;
+    assert.eq r3 r8;
+    await r4;
 
 constructor:
     set program_owner into admin_set[0u8];

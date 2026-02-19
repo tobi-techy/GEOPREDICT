@@ -5,18 +5,21 @@ import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
 import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { type Market, calcParimutuelPayout, formatAmount } from '@/lib/markets';
 import { PROGRAM_ID } from './WalletProvider';
+import { toMicrocredits } from '@/lib/token';
+import { pickBetRecord } from '@/lib/aleoRecords';
 
 interface ClaimModalProps {
   market: Market;
+  stakeHint: number;
   onClose: () => void;
 }
 
-export default function ClaimModal({ market, onClose }: ClaimModalProps) {
-  const { connected, address, executeTransaction } = useWallet();
+export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalProps) {
+  const { connected, address, executeTransaction, requestRecords } = useWallet();
   const [status, setStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle');
   const [txId, setTxId] = useState('');
   const [error, setError] = useState('');
-  const [stakeInput, setStakeInput] = useState('');
+  const [stakeInput, setStakeInput] = useState(() => (stakeHint > 0 ? String(Number(stakeHint.toFixed(2))) : ''));
 
   const stakeNum = Number(stakeInput) || 0;
   const settlement = useMemo(
@@ -26,22 +29,43 @@ export default function ClaimModal({ market, onClose }: ClaimModalProps) {
 
   const handleClaim = async () => {
     if (!connected || !address) { setError('Connect wallet first'); return; }
+    if (market.outcome === 0) { setError('Market is not resolved yet'); return; }
 
     setStatus('pending');
+    setError('');
     try {
       const winnerPool = market.outcome === 1 ? market.totalYes : market.totalNo;
       const loserPool = market.outcome === 1 ? market.totalNo : market.totalYes;
+      const winnerPoolUnits = toMicrocredits(winnerPool);
+      const loserPoolUnits = toMicrocredits(loserPool);
+      if (winnerPoolUnits <= 0) {
+        setStatus('error');
+        setError('Winner pool is empty on-chain; cannot compute claim payout.');
+        return;
+      }
+      const betRecords = await requestRecords(PROGRAM_ID, true);
+      const nonPlainBetRecords = await requestRecords(PROGRAM_ID, false);
+      const winningPosition = market.outcome as 1 | 2;
+      const betRecord =
+        pickBetRecord(betRecords, market.fieldId, winningPosition) ??
+        pickBetRecord(nonPlainBetRecords, market.fieldId, winningPosition);
+      if (!betRecord) {
+        setStatus('error');
+        setError('No winning bet record found in wallet for this market.');
+        return;
+      }
+
       const result = await executeTransaction({
         program: PROGRAM_ID,
         function: 'claim_winnings',
         inputs: [
-          // The wallet will prompt the user to select their Bet record
-          'bet_record',
+          betRecord,
           `${market.outcome}u8`,
-          `${winnerPool}u64`,
-          `${loserPool}u64`,
+          `${winnerPoolUnits}u64`,
+          `${loserPoolUnits}u64`,
         ],
         fee: 50_000,
+        privateFee: false,
       });
       setTxId(result?.transactionId ?? 'submitted');
       setStatus('success');
@@ -62,7 +86,7 @@ export default function ClaimModal({ market, onClose }: ClaimModalProps) {
             </div>
 
             <div className="mb-4">
-              <label className="block text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Your stake (preview payout)</label>
+              <label className="block text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Optional stake (preview payout)</label>
               <input type="number" min="0" step="0.01" value={stakeInput} onChange={(e) => setStakeInput(e.target.value)} placeholder="Enter stake to preview"
                 className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 text-[14px] text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-all" />
             </div>
@@ -78,14 +102,20 @@ export default function ClaimModal({ market, onClose }: ClaimModalProps) {
 
             <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.04] mb-6">
               <p className="text-[13px] text-white/40 leading-relaxed">
-                Privacy: your bet record is consumed privately. Only an opaque proof hash is finalized on-chain.
+                Privacy: your winning bet record is consumed privately and a new private credits record is minted as payout.
               </p>
             </div>
             {error && <p className="text-rose-400/80 text-sm text-center mb-4">{error}</p>}
             <div className="flex gap-3">
               <button onClick={onClose} className="flex-1 py-4 bg-white/[0.05] hover:bg-white/[0.08] rounded-2xl font-medium text-white/60 transition-all">Cancel</button>
               {connected ? (
-                <button onClick={handleClaim} className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 rounded-2xl font-medium text-white transition-all">Claim</button>
+                <button
+                  onClick={handleClaim}
+                  disabled={market.outcome === 0}
+                  className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 rounded-2xl font-medium text-white transition-all disabled:opacity-50"
+                >
+                  Claim
+                </button>
               ) : (
                 <div className="flex-1"><WalletMultiButton /></div>
               )}

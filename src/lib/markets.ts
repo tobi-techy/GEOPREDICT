@@ -1,8 +1,8 @@
-import { formatToken } from "./token";
+import { formatToken, fromMicrocredits } from "./token";
 
 export const ALEO_API = "https://api.explorer.provable.com/v1/testnet";
-export const DEPLOYED_PROGRAM = "geopredict_contract.aleo";
-export const DEPLOY_TX_ID = "at19jv50x5nuwpunnamgup8hp5ypvcrjpgtf9fjtsg6upfc9mgceygstf083x";
+export const DEPLOYED_PROGRAM = "geopredict_private_v2.aleo";
+export const DEPLOY_TX_ID = "at1m2zlpc96dnfelf9tk5swq8ugwzvjw6wgknlxwgsdkdvt20p675xqfcrnmf";
 
 export type MarketCategory =
   | "real_estate"
@@ -23,6 +23,11 @@ export interface Market {
   totalYes: number;
   totalNo: number;
   outcome: 0 | 1 | 2;
+  yesProbability?: number;
+  source?: 'aleo' | 'polymarket' | 'manifold' | 'news';
+  sourceUrl?: string;
+  chainTracked?: boolean;
+  locationConfidence?: 'high' | 'low';
 }
 
 export interface Bet {
@@ -155,7 +160,13 @@ export function getMarketById(id: string): Market | undefined {
 
 export function calcOdds(market: Market): { yes: number; no: number } {
   const total = market.totalYes + market.totalNo;
-  if (total === 0) return { yes: 50, no: 50 };
+  if (total === 0) {
+    if (typeof market.yesProbability === 'number' && market.yesProbability >= 0 && market.yesProbability <= 1) {
+      const yes = Math.round(market.yesProbability * 100);
+      return { yes, no: 100 - yes };
+    }
+    return { yes: 0, no: 0 };
+  }
   return {
     yes: Math.round((market.totalYes / total) * 100),
     no: Math.round((market.totalNo / total) * 100),
@@ -250,6 +261,7 @@ export const CATEGORY_LABELS: Record<MarketCategory, string> = {
 export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: number; totalNo: number; outcome: 0 | 1 | 2 } | null> {
   try {
     const res = await fetch(`${ALEO_API}/program/${DEPLOYED_PROGRAM}/mapping/market_totals/${fieldId}`);
+    if (!res.ok) return null;
     const raw = await res.text();
     if (!raw || raw === 'null') return null;
     const cleaned = raw.replace(/"/g, '');
@@ -258,8 +270,9 @@ export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: nu
     const outcomeMatch = cleaned.match(/outcome:\s*(\d+)u8/);
     if (!yesMatch || !noMatch || !outcomeMatch) return null;
     return {
-      totalYes: Number(yesMatch[1]),
-      totalNo: Number(noMatch[1]),
+      // Chain stores pool amounts in microcredits; convert for UI math/display.
+      totalYes: fromMicrocredits(Number(yesMatch[1])),
+      totalNo: fromMicrocredits(Number(noMatch[1])),
       outcome: Number(outcomeMatch[1]) as 0 | 1 | 2,
     };
   } catch {
@@ -270,6 +283,7 @@ export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: nu
 export async function fetchAllMarketTotals(markets: Market[]): Promise<Market[]> {
   const updated = await Promise.all(
     markets.map(async (m) => {
+      if (m.chainTracked === false) return m;
       const totals = await fetchMarketTotals(m.fieldId);
       return totals ? { ...m, ...totals } : m;
     }),

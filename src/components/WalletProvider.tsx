@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FC, ReactNode, useMemo, useSyncExternalStore } from 'react';
 import { AleoWalletProvider as WalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
 import { WalletModalProvider } from '@provablehq/aleo-wallet-adaptor-react-ui';
 import { ShieldWalletAdapter } from '@provablehq/aleo-wallet-adaptor-shield';
@@ -10,7 +10,7 @@ import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
 export const APP_NETWORK = Network.TESTNET;
-export const PROGRAM_ID = 'geopredict_contract.aleo';
+export const PROGRAM_ID = 'geopredict_private_v2.aleo';
 
 const Inner: FC<{ children: ReactNode }> = ({ children }) => {
   const wallets = useMemo(() => [new ShieldWalletAdapter()], []);
@@ -30,8 +30,11 @@ const Inner: FC<{ children: ReactNode }> = ({ children }) => {
 };
 
 export const AleoWalletProvider: FC<{ children: ReactNode }> = ({ children }) => {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   // Wait for client mount so useLocalStorage inside WalletProvider
   // reads the persisted walletName instead of hydrating with null.

@@ -6,7 +6,7 @@ Privacy-preserving map-native prediction markets on Aleo.
 
 - Wallet connection now uses **TestnetBeta** consistently (provider + tx builder), with clear connect states.
 - Added Leo extension detection + install CTA.
-- Added **Demo mode** fallback so judges can test without wallet extension.
+- Wallet-only flow: all bets and claims require a connected Leo wallet.
 - Added explicit token config (`CRED`, decimals=6) with consistent formatting/parsing.
 - Added winnings math preview (parimutuel payout) before placing a bet.
 - Added liquidity/trading baseline: implied odds from yes/no pools, pool depth, and slippage/impact preview.
@@ -40,7 +40,7 @@ Open `http://localhost:3000`.
 5. You should see:
    - account short address
    - active network label (`TestnetBeta`)
-6. If no extension is available, toggle **Demo ON** and continue testing full flow.
+6. Connect Leo wallet before placing bets or claims.
 
 ---
 
@@ -88,9 +88,9 @@ This pass avoids rendering market-specific claim details in public verify/claim 
 
 ## Known limitations
 
-- Demo mode does not submit real chain transactions.
+- Wallet extension is required (no demo fallback mode).
 - Wallet integration is focused on Leo extension; no multi-wallet fallback yet.
-- Claim flow still uses a placeholder private record input in frontend until record indexing is wired.
+- Claim and bet flows now fetch wallet records and submit real plaintext record inputs (no placeholder strings).
 - Liquidity model is AMM-like UI simulation; no on-chain matching engine yet.
 - Oracle/resolution governance is still minimal and not production hardened.
 
@@ -103,17 +103,19 @@ This pass avoids rendering market-specific claim details in public verify/claim 
 3. Verify pool depth + implied odds are visible.
 4. Click **Predict Yes/No** and enter amount.
 5. Confirm payout formula, estimated payout, and slippage preview appear.
-6. If no wallet: toggle **Demo ON**, confirm bet, and see success.
+6. Connect wallet and confirm a real Testnet transaction.
 7. Open resolved market, click **Claim Winnings**, verify privacy note + opaque attestation ID.
-8. Use **Verify Proof** and test an ID beginning with `wp_`.
+8. Use **Verify Proof** and paste the claim transaction ID (`at...`).
 
 ---
 
 ## Contract notes
 
 Contract path: `geopredict_contract/src/main.leo`
+Program ID: `geopredict_private_v2.aleo`
+Deployment tx: `at1m2zlpc96dnfelf9tk5swq8ugwzvjw6wgknlxwgsdkdvt20p675xqfcrnmf`
 
 Key updates:
-- `place_bet` now assigns `owner: self.signer`.
-- `claim_winnings` now computes parimutuel payout from market pools.
-- `finalize_claim` receives only `proof_hash` (no market details).
+- `place_bet` consumes a private `credits.aleo` record and escrows stake into program public balance.
+- `claim_winnings` computes parimutuel payout and transfers public escrow back into a private credits record.
+- `proof_hash` now mixes owner commitment with market/side context to reduce cross-market linkability.

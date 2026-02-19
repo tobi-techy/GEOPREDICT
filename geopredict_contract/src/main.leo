@@ -1,4 +1,6 @@
-program geopredict_contract.aleo {
+import credits.aleo;
+
+program geopredict_private_v2.aleo {
     struct MarketTotals {
         total_yes: u64,
         total_no: u64,
@@ -26,9 +28,18 @@ program geopredict_contract.aleo {
         Mapping::set(admin_set, 0u8, self.program_owner);
     }
 
-    async transition place_bet(public market_id: field, position: u8, amount: u64) -> (Bet, Future) {
+    async transition place_bet(
+        stake: credits.aleo/credits,
+        public market_id: field,
+        public position: u8,
+        public amount: u64,
+    ) -> (Bet, credits.aleo/credits, Future) {
+        assert_eq(stake.owner, self.signer);
         assert(position == 1u8 || position == 2u8);
         assert(amount > 0u64);
+
+        let escrow_transfer: (credits.aleo/credits, Future) =
+            credits.aleo/transfer_private_to_public(stake, self.address, amount);
 
         let bet: Bet = Bet {
             owner: self.signer,
@@ -37,10 +48,12 @@ program geopredict_contract.aleo {
             amount: amount,
         };
 
-        return (bet, finalize_place_bet(market_id, position, amount));
+        return (bet, escrow_transfer.0, finalize_place_bet(market_id, position, amount, escrow_transfer.1));
     }
 
-    async function finalize_place_bet(market_id: field, position: u8, amount: u64) {
+    async function finalize_place_bet(market_id: field, position: u8, amount: u64, escrow_future: Future) {
+        escrow_future.await();
+
         let current: MarketTotals = Mapping::get_or_use(
             market_totals,
             market_id,
@@ -83,14 +96,21 @@ program geopredict_contract.aleo {
         public outcome: u8,
         public winner_pool: u64,
         public loser_pool: u64,
-    ) -> (WinProof, Future) {
+    ) -> (WinProof, credits.aleo/credits, Future) {
+        assert_eq(self.signer, bet.owner);
+        assert(outcome == 1u8 || outcome == 2u8);
         assert_eq(bet.position, outcome);
         assert(winner_pool > 0u64);
 
         let loser_share: u64 = (bet.amount * loser_pool) / winner_pool;
         let amount_won: u64 = bet.amount + loser_share;
 
-        let proof_hash: field = BHP256::hash_to_field(bet.owner);
+        let owner_commitment: field = BHP256::hash_to_field(bet.owner);
+        let side_nonce: field = bet.position == 1u8 ? 1field : 2field;
+        let proof_hash: field = BHP256::hash_to_field(owner_commitment + bet.market_id + side_nonce);
+
+        let payout_transfer: (credits.aleo/credits, Future) =
+            credits.aleo/transfer_public_to_private(bet.owner, amount_won);
 
         let proof: WinProof = WinProof {
             owner: bet.owner,
@@ -98,7 +118,11 @@ program geopredict_contract.aleo {
             proof_hash: proof_hash,
         };
 
-        return (proof, finalize_claim(bet.market_id, outcome, winner_pool, loser_pool, proof_hash));
+        return (
+            proof,
+            payout_transfer.0,
+            finalize_claim(bet.market_id, outcome, winner_pool, loser_pool, payout_transfer.1)
+        );
     }
 
     async function finalize_claim(
@@ -106,10 +130,8 @@ program geopredict_contract.aleo {
         outcome: u8,
         winner_pool: u64,
         loser_pool: u64,
-        proof_hash: field,
+        payout_future: Future,
     ) {
-        assert(proof_hash != 0field);
-
         let totals: MarketTotals = Mapping::get(market_totals, market_id);
         assert_eq(totals.outcome, outcome);
 
@@ -117,5 +139,7 @@ program geopredict_contract.aleo {
         let expected_loser: u64 = outcome == 1u8 ? totals.total_no : totals.total_yes;
         assert_eq(winner_pool, expected_winner);
         assert_eq(loser_pool, expected_loser);
+
+        payout_future.await();
     }
 }
