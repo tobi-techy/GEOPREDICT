@@ -1,8 +1,8 @@
 import { formatToken, fromMicrocredits } from "./token";
 
 export const ALEO_API = "https://api.explorer.provable.com/v1/testnet";
-export const DEPLOYED_PROGRAM = "geopredict_private_v2.aleo";
-export const DEPLOY_TX_ID = "at1m2zlpc96dnfelf9tk5swq8ugwzvjw6wgknlxwgsdkdvt20p675xqfcrnmf";
+export const DEPLOYED_PROGRAM = "geopredict_private_v3.aleo";
+export const DEPLOY_TX_ID = "at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz";
 
 export type MarketCategory =
   | "real_estate"

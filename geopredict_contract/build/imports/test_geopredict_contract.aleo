@@ -1,5 +1,5 @@
 import credits.aleo;
-import geopredict_private_v2.aleo;
+import geopredict_private_v3.aleo;
 program test_geopredict_contract.aleo;
 
 function keep_test_program_valid:

@@ -1,4 +1,4 @@
-import geopredict_private_v2.aleo;
+import geopredict_private_v3.aleo;
 program test_geopredict_contract.aleo {
     transition keep_test_program_valid(public x: u8) -> u8 {
         return x;

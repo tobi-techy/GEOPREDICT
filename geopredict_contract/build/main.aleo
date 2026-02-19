@@ -1,5 +1,5 @@
 import credits.aleo;
-program geopredict_private_v2.aleo;
+program geopredict_private_v3.aleo;
 
 record Bet:
     owner as address.private;
@@ -37,12 +37,12 @@ function place_bet:
     assert.eq r6 true;
     gt r3 0u64 into r7;
     assert.eq r7 true;
-    call credits.aleo/transfer_private_to_public r0 geopredict_private_v2.aleo r3 into r8 r9;
+    call credits.aleo/transfer_private_to_public r0 geopredict_private_v3.aleo r3 into r8 r9;
     cast self.signer r1 r2 r3 into r10 as Bet.record;
     async place_bet r1 r2 r3 r9 into r11;
     output r10 as Bet.record;
     output r8 as credits.aleo/credits.record;
-    output r11 as geopredict_private_v2.aleo/place_bet.future;
+    output r11 as geopredict_private_v3.aleo/place_bet.future;
 
 finalize place_bet:
     input r0 as field.public;
@@ -70,7 +70,7 @@ function resolve_market:
     or r2 r3 into r4;
     assert.eq r4 true;
     async resolve_market self.caller r0 r1 into r5;
-    output r5 as geopredict_private_v2.aleo/resolve_market.future;
+    output r5 as geopredict_private_v3.aleo/resolve_market.future;
 
 finalize resolve_market:
     input r0 as address.public;
@@ -105,7 +105,7 @@ function claim_winnings:
     async claim_winnings r0.market_id r1 r0.amount r2 r13 into r15;
     output r14 as WinProof.record;
     output r12 as credits.aleo/credits.record;
-    output r15 as geopredict_private_v2.aleo/claim_winnings.future;
+    output r15 as geopredict_private_v3.aleo/claim_winnings.future;
 
 finalize claim_winnings:
     input r0 as field.public;

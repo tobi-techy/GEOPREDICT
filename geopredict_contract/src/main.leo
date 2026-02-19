@@ -1,6 +1,6 @@
 import credits.aleo;
 
-program geopredict_private_v2.aleo {
+program geopredict_private_v3.aleo {
     struct MarketTotals {
         total_yes: u64,
         total_no: u64,

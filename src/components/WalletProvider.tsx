@@ -10,7 +10,7 @@ import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import '@provablehq/aleo-wallet-adaptor-react-ui/dist/styles.css';
 
 export const APP_NETWORK = Network.TESTNET;
-export const PROGRAM_ID = 'geopredict_private_v2.aleo';
+export const PROGRAM_ID = 'geopredict_private_v3.aleo';
 
 const Inner: FC<{ children: ReactNode }> = ({ children }) => {
   const wallets = useMemo(() => [new ShieldWalletAdapter()], []);
