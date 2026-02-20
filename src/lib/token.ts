@@ -6,11 +6,20 @@ export const TOKEN = {
 } as const;
 
 export function toMicrocredits(value: string | number): number {
-  const normalized = typeof value === 'number' ? value.toString() : value.trim();
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    return Math.floor(value * 10 ** TOKEN.decimals);
+  }
+
+  const normalized = value.trim();
   if (!normalized) return 0;
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return 0;
+
   const [whole, frac = ''] = normalized.split('.');
   const safeWhole = Number(whole || '0');
+  if (!Number.isFinite(safeWhole)) return 0;
   const fracPadded = Number((frac + '0'.repeat(TOKEN.decimals)).slice(0, TOKEN.decimals) || '0');
+  if (!Number.isFinite(fracPadded)) return 0;
   return safeWhole * 10 ** TOKEN.decimals + fracPadded;
 }
 

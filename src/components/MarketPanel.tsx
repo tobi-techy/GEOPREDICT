@@ -24,11 +24,11 @@ export default function MarketPanel({ market, onClose, myYesStake = 0, myNoStake
 
   return (
     <>
-      <div className="fixed right-0 top-[120px] h-[calc(100vh-120px)] w-[380px] bg-zinc-950/95 backdrop-blur-2xl border-l border-white/[0.06] overflow-y-auto z-30">
-        <div className="p-6">
+      <div className="fixed right-4 top-[88px] z-30 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl border border-white/[0.08] bg-zinc-950/95 backdrop-blur-2xl shadow-2xl">
+        <div className="max-h-[calc(100vh-120px)] overflow-y-auto p-5">
           <button onClick={onClose} className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center rounded-full bg-white/[0.05] hover:bg-white/[0.1] transition-all">×</button>
 
-          <h2 className="text-[22px] font-semibold text-white tracking-tight mt-3 pr-8 leading-tight">{market.question}</h2>
+          <h2 className="text-[20px] font-semibold text-white tracking-tight mt-2 pr-8 leading-tight">{market.question}</h2>
           <p className="text-[13px] text-white/30 mt-3">Resolves {market.deadline.toLocaleDateString()}</p>
           {market.source && (
             <p className="text-[12px] text-white/35 mt-1">

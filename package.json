@@ -9,11 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@provablehq/aleo-types": "latest",
     "@provablehq/aleo-wallet-adaptor-core": "latest",
+    "@provablehq/aleo-wallet-adaptor-leo": "^0.3.0-alpha.3",
     "@provablehq/aleo-wallet-adaptor-react": "latest",
     "@provablehq/aleo-wallet-adaptor-react-ui": "latest",
     "@provablehq/aleo-wallet-adaptor-shield": "latest",
-    "@provablehq/aleo-types": "latest",
     "mapbox-gl": "^3.18.1",
     "next": "16.1.5",
     "react": "19.2.3",
