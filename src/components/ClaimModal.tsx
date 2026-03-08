@@ -7,7 +7,8 @@ import { type Market, calcParimutuelPayout, formatAmount } from '@/lib/markets';
 import { ALEO_API } from '@/lib/markets';
 import { APP_NETWORK, PROGRAM_ID } from './WalletProvider';
 import { toMicrocredits } from '@/lib/token';
-import { extractRecordAmountMicrocredits, pickBetRecord } from '@/lib/aleoRecords';
+import { extractRecordAmountMicrocredits, extractRecordPlaintext, pickBetRecord } from '@/lib/aleoRecords';
+import PrivacyIndicator from './PrivacyIndicator';
 import {
   markPendingTransactionConfirmed,
   markPendingTransactionFailed,
@@ -23,6 +24,7 @@ interface ClaimModalProps {
   market: Market;
   stakeHint: number;
   onClose: () => void;
+  onSuccess?: () => void;
 }
 
 function makePrivateNonceField(): string {
@@ -33,7 +35,7 @@ function makePrivateNonceField(): string {
   return `${value}field`;
 }
 
-export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalProps) {
+export default function ClaimModal({ market, stakeHint, onClose, onSuccess }: ClaimModalProps) {
   const {
     connected,
     wallet,
@@ -146,7 +148,7 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
       historyProgram: PROGRAM_ID,
       requestTransactionHistory,
       maxAttempts,
-      intervalMs: 2_000,
+      intervalMs: 1_500,
       onExplorerTxId: (nextId) => setTxId(nextId),
     });
 
@@ -199,12 +201,25 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
         setFeeNotice((prev) => (prev ? `${prev} ${recordsWarning}` : recordsWarning));
       }
       const winningPosition = market.outcome as 1 | 2;
-      const betRecord =
+      let betRecord =
         pickBetRecord(betRecords, market.fieldId, winningPosition) ??
         pickBetRecord(nonPlainBetRecords, market.fieldId, winningPosition);
+      
+      // Fallback: if no exact match, try any bet record for this program (Shield may not expose all fields)
+      if (!betRecord) {
+        const allRecords = [...betRecords, ...nonPlainBetRecords];
+        for (const rec of allRecords) {
+          const plaintext = extractRecordPlaintext(rec);
+          if (plaintext && plaintext.includes('market_id') && plaintext.includes('position')) {
+            betRecord = plaintext;
+            break;
+          }
+        }
+      }
+      
       if (!betRecord) {
         setStatus('error');
-        setError('No winning bet record found in wallet for this market.');
+        setError(`No bet record found. Records available: ${betRecords.length} plaintext, ${nonPlainBetRecords.length} encrypted. Check wallet has synced.`);
         return;
       }
 
@@ -232,7 +247,7 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
         program: PROGRAM_ID,
         function: 'claim_winnings',
         inputs,
-        fee: 50_000,
+        fee: 100_000, // Increased fee for faster processing
         privateFee,
       });
 
@@ -265,6 +280,7 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
       setRelayPendingId(null);
       markPendingTransactionConfirmed(submittedId, resolvedTxId);
       setStatus('success');
+      onSuccess?.();
     } catch (err) {
       setStatus('error');
       const message = err instanceof Error ? err.message : 'Transaction failed';
@@ -303,6 +319,7 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
       markPendingTransactionConfirmed(relayPendingId, resolvedTxId);
       setRelayPendingId(null);
       setStatus('success');
+      onSuccess?.();
     } catch (err) {
       setStatus('error');
       const message = err instanceof Error ? err.message : 'Transaction confirmation failed';
@@ -345,7 +362,8 @@ export default function ClaimModal({ market, stakeHint, onClose }: ClaimModalPro
                 Privacy: claim derives payout from on-chain market totals, consumes your private bet record, and mints a private payout record.
               </p>
             </div>
-            <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] mb-4">
+            <PrivacyIndicator context="claim" />
+            <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] mb-4 mt-4">
               <input
                 type="checkbox"
                 checked={usePrivateFee}

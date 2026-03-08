@@ -43,121 +43,6 @@ export interface WinProof {
   proofHash: string;
 }
 
-export const MOCK_MARKETS: Market[] = [
-  {
-    id: "1",
-    fieldId: "1field",
-    lat: 37.7749,
-    lng: -122.4194,
-    category: "real_estate",
-    question: "Will SF median home price exceed $1.5M by Q2 2026?",
-    deadline: new Date("2026-06-30"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "2",
-    fieldId: "2field",
-    lat: 40.7484,
-    lng: -73.9857,
-    category: "music",
-    question: "Will Taylor Swift announce NYC concert in 2026?",
-    deadline: new Date("2026-12-31"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "3",
-    fieldId: "3field",
-    lat: 51.5074,
-    lng: -0.1276,
-    category: "sports",
-    question: "Will Arsenal win Premier League 2025-26?",
-    deadline: new Date("2026-05-25"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "4",
-    fieldId: "4field",
-    lat: 35.6895,
-    lng: 139.6917,
-    category: "crypto",
-    question: "Will Bitcoin exceed $200k before Tokyo halving event?",
-    deadline: new Date("2028-04-01"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "5",
-    fieldId: "5field",
-    lat: -22.9068,
-    lng: -43.1729,
-    category: "event",
-    question: "Will Rio Carnival 2027 break attendance records?",
-    deadline: new Date("2027-02-16"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "6",
-    fieldId: "6field",
-    lat: 25.7617,
-    lng: -80.1918,
-    category: "sports",
-    question: "Will Miami host Super Bowl 2027?",
-    deadline: new Date("2026-05-01"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "7",
-    fieldId: "7field",
-    lat: 52.52,
-    lng: 13.405,
-    category: "music",
-    question: "Will Berlin host Eurovision 2027?",
-    deadline: new Date("2026-09-01"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "8",
-    fieldId: "8field",
-    lat: 1.3521,
-    lng: 103.8198,
-    category: "crypto",
-    question: "Will Singapore approve spot ETH ETF by 2026?",
-    deadline: new Date("2026-12-31"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-  {
-    id: "9",
-    fieldId: "9field",
-    lat: 55.7558,
-    lng: 37.6173,
-    category: "environmental",
-    question: "Will Moscow see record snowfall winter 2026?",
-    deadline: new Date("2026-03-01"),
-    totalYes: 0,
-    totalNo: 0,
-    outcome: 0,
-  },
-];
-
-export function getMarketById(id: string): Market | undefined {
-  return MOCK_MARKETS.find((m) => m.id === id);
-}
-
 export function calcOdds(market: Market): { yes: number; no: number } {
   const total = market.totalYes + market.totalNo;
   if (total === 0) {
@@ -281,11 +166,20 @@ export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: nu
 }
 
 export async function fetchAllMarketTotals(markets: Market[]): Promise<Market[]> {
+  // Fetch on-chain data for top markets to detect bets and resolutions
+  const FETCH_LIMIT = 50;
+  
   const updated = await Promise.all(
-    markets.map(async (m) => {
-      if (m.chainTracked === false) return m;
-      const totals = await fetchMarketTotals(m.fieldId);
-      return totals ? { ...m, ...totals } : m;
+    markets.map(async (m, idx) => {
+      // Fetch for already-tracked markets or first N markets
+      if (m.chainTracked || idx < FETCH_LIMIT) {
+        const totals = await fetchMarketTotals(m.fieldId);
+        if (totals) {
+          const hasActivity = totals.totalYes > 0 || totals.totalNo > 0 || totals.outcome !== 0;
+          return { ...m, ...totals, chainTracked: hasActivity || m.chainTracked };
+        }
+      }
+      return m;
     }),
   );
   return updated;

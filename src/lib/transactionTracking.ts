@@ -168,8 +168,13 @@ export async function resolveOnchainTransactionId(params: {
   } = params;
 
   let candidate = walletTxId;
+  
+  // Shield wallet returns temporary IDs like "shield_xxx" - these need special handling
+  const isTemporaryId = walletTxId.startsWith('shield_') || !walletTxId.startsWith('at');
+  // Use fewer attempts for temporary IDs since they need wallet confirmation
+  const effectiveMaxAttempts = isTemporaryId ? Math.min(maxAttempts, 20) : maxAttempts;
 
-  for (let i = 0; i < maxAttempts; i += 1) {
+  for (let i = 0; i < effectiveMaxAttempts; i += 1) {
     if (candidate.startsWith('at') && (await explorerHasTx(aleoApi, candidate))) {
       return candidate;
     }

@@ -1,394 +1,248 @@
 # GeoPredict
 
-GeoPredict is a **privacy-preserving, map-first prediction market** built on **Aleo testnet**.
-It combines live world-event market ingestion (Polymarket + Manifold), geospatial discovery, and private bet/claim execution via Aleo records.
+**Privacy-preserving prediction markets on Aleo** — discover world events on a map, bet privately with zero-knowledge proofs.
 
-- Frontend: Next.js + React + Tailwind + Mapbox GL
-- Wallet: Shield/Leo wallet adaptor
-- Contract: Leo (`geopredict_private_v3.aleo`)
-- Network: Aleo testnet (Provable Explorer API)
+## Live on Aleo Testnet
 
-## Live Program Metadata
+| | |
+|---|---|
+| Program ID | `geopredict_private_v3.aleo` |
+| Deploy TX | [`at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz`](https://api.explorer.provable.com/v1/testnet/transaction/at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz) |
+| Program URL | [Explorer](https://api.explorer.provable.com/v1/testnet/program/geopredict_private_v3.aleo) |
+| Network | Aleo Testnet |
+| Wallet | Shield Wallet / Leo Wallet |
+| Currency | Native Aleo credits (`credits.aleo`) |
 
-- Program ID: `geopredict_private_v3.aleo`
-- Deployment transaction: `at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz`
-- Explorer program URL: [https://api.explorer.provable.com/v1/testnet/program/geopredict_private_v3.aleo](https://api.explorer.provable.com/v1/testnet/program/geopredict_private_v3.aleo)
-- Explorer transaction URL: [https://api.explorer.provable.com/v1/testnet/transaction/at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz](https://api.explorer.provable.com/v1/testnet/transaction/at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz)
+---
 
-## What the App Does
+## What It Does
 
-GeoPredict lets users:
+GeoPredict aggregates 300+ live prediction markets from Polymarket and Manifold, plots them on a world map, and lets users place **private bets using Aleo's zero-knowledge infrastructure**.
 
-1. Discover many live, location-inferred prediction markets on a world map.
-2. Switch between **Map view** (default) and **Grid view**.
-3. Filter markets by category in both views.
-4. Place private Yes/No bets with Aleo wallet records.
-5. Claim winnings privately after resolution.
-6. Verify claim transactions on-chain.
+1. **Discover** — Browse markets on an interactive map or grid view
+2. **Bet privately** — Your position (Yes/No) and stake amount are private Aleo records
+3. **Claim privately** — Winnings are paid out as private credits with unlinkable proof hashes
+4. **Verify on-chain** — Every transaction is verifiable on Aleo testnet explorer
 
-## Key Product Features
-
-- **No demo betting mode**: all betting/claiming actions use wallet transactions.
-- **Default map UX** with clustering to reduce pin crowding.
-- **Grid fallback UX** for fast scanning of many markets.
-- **Category filtering** (`event`, `sports`, `crypto`, `environmental`, `real_estate`, `music`).
-- **Live market ingestion** from public APIs every minute (server revalidation).
-- **30s pool refresh loop** for chain-tracked totals in UI.
-- **Parimutuel payout previews** before bet and claim.
-- **Private-fee toggle** (with public-fee fallback and transparent user notice).
-
-## Architecture Overview
-
-### 1) Frontend (Next.js)
-
-Main UI lives in `/src/app/page.tsx`:
-
-- Header: wallet connect, program/deploy links, view toggle.
-- Category chips: filter visible markets.
-- Content:
-  - `map` mode: interactive map pins and clusters.
-  - `grid` mode: card list.
-- Right-side fixed market panel for market actions.
-
-Primary components:
-
-- `/src/components/Map.tsx`: Mapbox map, clustering, popup summaries.
-- `/src/components/MarketPanel.tsx`: fixed side panel with market details, odds, pool depth, actions.
-- `/src/components/BetModal.tsx`: private bet execution flow.
-- `/src/components/ClaimModal.tsx`: private claim execution flow.
-- `/src/components/VerifyProof.tsx`: on-chain claim transition verification by tx id.
-- `/src/components/WalletProvider.tsx`: Shield wallet provider + network/program wiring.
-
-### 2) Live Market Data API
-
-`/src/app/api/live-markets/route.ts`:
-
-- Pulls from:
-  - Polymarket Gamma API
-  - Manifold API
-- Normalizes binary markets and filters unresolved + future-dated markets.
-- Infers location using country/capital token matching plus deterministic jitter.
-- Deduplicates by normalized question text.
-- Ranks by liquidity/volume score.
-- Returns up to 300 markets.
-
-### 3) Aleo Contract
-
-`/geopredict_contract/src/main.leo` program: `geopredict_private_v3.aleo`
-
-- `place_bet`: consumes private credits record, escrows to public pool, emits private `Bet` record.
-- `resolve_market`: admin-only market resolution.
-- `claim_winnings`: consumes winning `Bet` record, verifies payout, mints private payout record and `WinProof`.
-- Mapping `market_totals`: stores aggregate public pool totals and outcome.
-
-### 4) Wallet + Records
-
-- Uses `@provablehq/aleo-wallet-adaptor-*` with Shield adapter.
-- Reads wallet records with `requestRecords`.
-- Selects records via parsers in `/src/lib/aleoRecords.ts`.
+---
 
 ## Privacy Model
 
-### Private on Aleo
+### What's Private (ZK-protected)
 
-- User bet position (`position`) in `place_bet` transition input.
-- User stake amount (`amount`) in `place_bet` transition input.
-- Bet ownership and bet record contents.
-- Claim nonce used to randomize proof hash linkage.
+- Your bet position (Yes or No)
+- Your stake amount
+- Your `Bet` record ownership
+- Claim nonce (prevents proof hash linkage across claims)
 
-### Public on Aleo
+### What's Public (on-chain)
 
-- Market id (`market_id`) for pool accounting.
-- Aggregate pool totals per market (`total_yes`, `total_no`).
-- Market outcome after admin resolution.
+- Market ID (for pool accounting)
+- Aggregate pool totals (`total_yes`, `total_no`)
+- Market outcome after resolution
 
-### Anti-linkability improvement
+This design lets the contract compute parimutuel payouts while keeping individual positions hidden.
 
-`claim_winnings` includes `claim_nonce: field` and computes:
+---
 
-- `proof_hash = hash(owner_commitment + market_id + claim_nonce)`
+## Architecture
 
-This avoids deterministic proof hash reuse patterns across claims.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend (Next.js)                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+│  │ Map View │  │Grid View │  │ BetModal │  │   ClaimModal     │ │
+│  │ (Mapbox) │  │          │  │          │  │                  │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘ │
+│       │             │             │                  │           │
+│       └─────────────┴─────────────┴──────────────────┘           │
+│                              │                                   │
+│                    ┌─────────▼─────────┐                         │
+│                    │  WalletProvider   │                         │
+│                    │ (Shield/Leo SDK)  │                         │
+│                    └─────────┬─────────┘                         │
+└──────────────────────────────┼───────────────────────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+              ▼                ▼                ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  Aleo Testnet   │  │   Polymarket    │  │    Manifold     │
+│                 │  │   Gamma API     │  │      API        │
+│ geopredict_     │  │                 │  │                 │
+│ private_v3.aleo │  │  (market data)  │  │  (market data)  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
 
-## Smart Contract Interface (v3)
+### Data Flow
+
+1. **Market ingestion**: API route fetches from Polymarket + Manifold, infers geolocation, deduplicates
+2. **Display**: Markets shown with source odds (e.g., "65% Yes on Polymarket")
+3. **Betting**: User bets go to Aleo contract — GeoPredict maintains its own on-chain pool
+4. **Pool tracking**: After first bet, market becomes "chain-tracked" and shows real on-chain totals
+5. **Claiming**: Winners claim from on-chain pool with private payout records
+
+### Key Distinction: Source Odds vs On-Chain Pool
+
+- **Source odds**: Probability from Polymarket/Manifold (informational only)
+- **GeoPredict pool**: Actual Aleo credits staked through this app (starts at 0)
+- **On-chain totals**: Real `market_totals` mapping values after bets are placed
+
+---
+
+## Smart Contract (`geopredict_private_v3.aleo`)
 
 ### `place_bet`
-
 ```leo
 async transition place_bet(
-    stake: credits.aleo/credits,
+    stake: credits.aleo/credits,  // private input record
     public market_id: field,
-    position: u8,
-    amount: u64,
+    position: u8,                 // private: 1=Yes, 2=No
+    amount: u64,                  // private
 ) -> (Bet, credits.aleo/credits, Future)
 ```
 
-Behavior:
-
-- Validates signer owns `stake` record.
-- Validates `position` is `1` (Yes) or `2` (No).
-- Transfers `amount` from private credits record to program public balance.
-- Returns private `Bet` record.
-- Finalize updates mapping totals.
-
 ### `resolve_market`
-
 ```leo
-async transition resolve_market(public market_id: field, public outcome: u8) -> Future
+async transition resolve_market(
+    public market_id: field,
+    public outcome: u8            // 1=Yes won, 2=No won
+) -> Future
 ```
-
-Behavior:
-
-- Admin-only (program owner set in constructor).
-- Sets final outcome (`1` Yes, `2` No).
+Admin-only (deployer address).
 
 ### `claim_winnings`
-
 ```leo
 async transition claim_winnings(
-    bet: Bet,
+    bet: Bet,                     // private record
     public outcome: u8,
     public expected_payout: u64,
-    claim_nonce: field,
+    claim_nonce: field,           // private, prevents linkage
 ) -> (WinProof, credits.aleo/credits, Future)
 ```
 
-Behavior:
-
-- Verifies claimant owns bet and bet position matches resolved outcome.
-- Derives payout from mapping totals in finalize.
-- Asserts `expected_payout` equals derived parimutuel payout.
-- Transfers payout from public pool to private credits.
-
-## Payout Formula
-
-Parimutuel payout:
-
-```text
-loser_share = (bet_amount * loser_pool) / winner_pool
-payout      = bet_amount + loser_share
+### Payout Formula (Parimutuel)
+```
+loser_share = (stake × loser_pool) / winner_pool
+payout = stake + loser_share
 ```
 
-UI uses this for:
+---
 
-- Bet preview (`BetModal`)
-- Claim preview (`ClaimModal`)
-- Estimated profit and trade impact display
+## PMF & GTM
+
+### Product-Market Fit
+
+**Problem**: Prediction markets are powerful information aggregation tools, but existing platforms expose user positions publicly, creating privacy and regulatory concerns.
+
+**Solution**: GeoPredict brings prediction market UX to Aleo's privacy layer:
+- Bet without revealing your position to other market participants
+- Claim winnings without linking to your betting history
+- Geographic discovery makes markets more accessible than list-based UIs
+
+**Target users**:
+- Privacy-conscious traders who want prediction market exposure without public position tracking
+- Users in jurisdictions where public betting records create legal ambiguity
+- Crypto natives who value on-chain privacy as a first principle
+
+### Go-to-Market
+
+1. **Testnet phase** (current): Demonstrate working ZK prediction market on Aleo
+2. **Mainnet launch**: Deploy with real credits, focus on high-interest event categories
+3. **Market maker incentives**: Bootstrap liquidity with early adopter rewards
+4. **Oracle decentralization**: Move from admin resolution to decentralized oracle network
+
+---
+
+## Changelog (Wave 1 → Wave 2)
+
+### Wave 1 Feedback
+> "Interesting interface for prediction market, might be able to gain lots of traction in times like this (war), numbers are all currently mocked on website, no actual calculation for winnings"
+
+### Wave 2 Changes
+
+| Change | Description |
+|--------|-------------|
+| **Real on-chain pools** | GeoPredict pool starts at 0, shows actual on-chain totals after bets |
+| **Source odds clarity** | UI now shows "65% Yes on Polymarket" separately from GeoPredict pool |
+| **Chain tracking** | Markets become chain-tracked after first bet, fetching real `market_totals` |
+| **Parimutuel math** | Payout preview uses real formula: `stake + (stake/winner_pool) × loser_pool` |
+| **No demo mode** | All betting/claiming paths execute real Aleo transactions |
+| **Shield Wallet** | Updated to `@provablehq/aleo-wallet-adaptor-*` packages |
+| **Native credits** | Uses `credits.aleo` instead of custom token |
+| **Deployed contract** | `geopredict_private_v3.aleo` live on testnet |
+
+---
 
 ## Running Locally
 
 ### Prerequisites
-
 - Node.js 20+
-- npm
-- Leo wallet extension (for real bet/claim interactions)
-- Mapbox token
+- Shield Wallet or Leo Wallet browser extension
+- Mapbox token (for map view)
 
-### Install and start
-
+### Setup
 ```bash
 npm install
+echo "NEXT_PUBLIC_MAPBOX_TOKEN=your_token" > .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000)
 
-### Environment variables
-
-Create `.env.local`:
-
+### Contract Development
 ```bash
-NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_public_token
-```
-
-Notes:
-
-- Map view requires `NEXT_PUBLIC_MAPBOX_TOKEN`.
-- If missing, UI shows a map configuration error and still supports non-map portions of the app.
-
-## Contract Development (Leo)
-
-From `/geopredict_contract`:
-
-```bash
+cd geopredict_contract
 leo build
 leo test
 ```
 
-Current program config (`/geopredict_contract/program.json`):
-
-- Program: `geopredict_private_v3.aleo`
-- Leo: `3.4.0`
-- Dependency: `credits.aleo` (network)
-
-## Deploy or Upgrade on Aleo Testnet
-
-Set contract env (`/geopredict_contract/.env`):
-
-```bash
-PRIVATE_KEY=APrivateKey1...
-NETWORK=testnet
-ENDPOINT=https://api.explorer.provable.com/v1
-```
-
-Deploy new namespace:
-
-```bash
-leo deploy --broadcast --network testnet --endpoint https://api.explorer.provable.com/v1 --priority-fees 200000
-```
-
-Upgrade existing namespace:
-
-```bash
-leo upgrade --broadcast --network testnet --endpoint https://api.explorer.provable.com/v1 --priority-fees 200000
-```
-
-Important Aleo rule:
-
-- `upgrade` requires function signatures to remain compatible.
-- If you changed transition input types (for example `place_bet`), a new program id/namespace is required.
-
-## Frontend Program Wiring
-
-These files must point to the deployed program:
-
-- `/src/components/WalletProvider.tsx` (`PROGRAM_ID`)
-- `/src/lib/markets.ts` (`DEPLOYED_PROGRAM`, `DEPLOY_TX_ID`)
-
-## User Flows
-
-### Place Bet
-
-1. User opens market panel and chooses Yes/No.
-2. App parses amount to microcredits.
-3. App requests wallet `credits.aleo` records.
-4. If no suitable private record exists, app attempts `transfer_public_to_private` conversion.
-5. App calls `place_bet` with:
-   - private stake record
-   - public market id
-   - private position
-   - private amount
-6. UI confirms transaction and updates local stake view.
-
-### Claim Winnings
-
-1. User opens claim modal on resolved market.
-2. App fetches winner bet record from wallet.
-3. App computes expected payout from market totals.
-4. App generates random private `claim_nonce`.
-5. App calls `claim_winnings`.
-6. UI shows transaction id and success state.
-
-### Verify Claim
-
-1. User pastes tx id in Verify widget.
-2. App fetches transaction from explorer API.
-3. App verifies transition matches:
-   - program: `geopredict_private_v3.aleo`
-   - function: `claim_winnings`
-
-## Privacy vs Metadata Tradeoff
-
-Each transaction supports fee mode choice:
-
-- `privateFee = true` (stronger metadata privacy when fee record exists)
-- fallback to public fee if private fee record is unavailable
-
-UI explicitly surfaces fallback so user understands privacy level used for that tx.
-
-## Troubleshooting
-
-### "No credits records available"
-
-Cause:
-
-- Wallet has no spendable private credits records for required stake/fee.
-
-What to do:
-
-1. Fund wallet public balance on testnet.
-2. Create private credits record (`transfer_public_to_private`).
-3. Retry with smaller amount if record fragmentation prevents exact selection.
-
-### "expects 3 inputs, but 4 were provided"
-
-Cause:
-
-- Frontend/contract program id mismatch (old deployed program ABI vs new client inputs).
-
-Fix:
-
-1. Confirm deployed program id and ABI.
-2. Update `PROGRAM_ID` and `DEPLOYED_PROGRAM` in frontend.
-3. Restart app and retry.
-
-### Map pins look crowded
-
-Current behavior:
-
-- Clustering enabled in `Map.tsx`.
-- High-confidence geolocated points are preferred when many markets are available.
+---
 
 ## Testing Checklist
 
-### Frontend checks
+- [ ] Connect Shield/Leo wallet
+- [ ] Map loads with clustered pins
+- [ ] Toggle Map/Grid view
+- [ ] Filter by category
+- [ ] Open market panel, see source odds
+- [ ] Place bet (requires testnet credits)
+- [ ] Verify transaction on explorer
+- [ ] After bet, market shows on-chain pool totals
 
-- `npm run lint`
-- `npm run build`
-
-### Contract checks
-
-- `cd geopredict_contract && leo build`
-- `cd geopredict_contract && leo test`
-
-### Manual E2E checks
-
-1. Connect Leo wallet.
-2. Confirm map loads and cluster expansion works.
-3. Toggle Map/Grid view.
-4. Filter categories and verify both views update.
-5. Place bet on unresolved market.
-6. Verify transaction appears on explorer.
-7. Resolve market (admin path) and claim winnings.
-8. Verify claim tx using Verify widget.
+---
 
 ## Current Limitations
 
-- External source market totals are not automatically reconciled with on-chain mapping totals unless market is chain-tracked.
-- Resolution/oracle governance is currently admin-driven, not decentralized.
-- Record selection can fail with fragmented wallet records; wallet-side record consolidation UX is still basic.
-- Map geolocation uses text inference and jitter, so some pins are approximate.
+- **Oracle**: Resolution is admin-driven (deployer address), not decentralized
+- **Record fragmentation**: Large bets may fail if wallet has many small records
+- **Geolocation**: Inferred from market text, some pins are approximate
+
+---
 
 ## Project Structure
 
-```text
+```
 GEOPREDICT/
-  src/
-    app/
-      api/live-markets/route.ts   # Live market ingestion + normalization
-      page.tsx                    # Main UI shell, view/filter state
-    components/
-      WalletProvider.tsx          # Aleo wallet + program config
-      Map.tsx                     # Mapbox map with clustering
-      MarketPanel.tsx             # Fixed right-side market panel
-      BetModal.tsx                # Private betting flow
-      ClaimModal.tsx              # Private claim flow
-      VerifyProof.tsx             # On-chain claim verification widget
-    lib/
-      markets.ts                  # Types, odds math, chain mapping reads
-      aleoRecords.ts              # Wallet record parsing/selection
-      token.ts                    # Credits unit conversions
-  geopredict_contract/
-    src/main.leo                  # Aleo program logic (v3)
-    tests/test_geopredict_contract.leo
+├── src/
+│   ├── app/
+│   │   ├── api/live-markets/    # Market ingestion from Polymarket + Manifold
+│   │   └── page.tsx             # Main UI
+│   ├── components/
+│   │   ├── WalletProvider.tsx   # Shield/Leo wallet config
+│   │   ├── Map.tsx              # Mapbox with clustering
+│   │   ├── MarketPanel.tsx      # Market details + actions
+│   │   ├── BetModal.tsx         # Private bet flow
+│   │   └── ClaimModal.tsx       # Private claim flow
+│   └── lib/
+│       ├── markets.ts           # Types, odds math, chain reads
+│       ├── aleoRecords.ts       # Wallet record parsing
+│       └── token.ts             # Credits conversions
+└── geopredict_contract/
+    └── src/main.leo             # Aleo program (v3)
 ```
 
-## Roadmap Direction
-
-- Better oracle/resolution mechanism for practical production use.
-- First-class chain tracking sync for all imported live markets.
-- Improved record management UX (split/merge/consolidate hints).
-- Stronger privacy defaults for fee handling and metadata minimization.
+---
 
 ## License
 

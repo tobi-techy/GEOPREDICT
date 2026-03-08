@@ -156,7 +156,12 @@ export default function Home() {
     setMarkets((prev) =>
       prev.map((m) =>
         m.id === marketId
-          ? { ...m, totalYes: m.totalYes + (position === 1 ? stake : 0), totalNo: m.totalNo + (position === 2 ? stake : 0) }
+          ? {
+              ...m,
+              chainTracked: true,
+              totalYes: m.totalYes + (position === 1 ? stake : 0),
+              totalNo: m.totalNo + (position === 2 ? stake : 0),
+            }
           : m,
       ),
     );
@@ -226,9 +231,18 @@ export default function Home() {
               <option value="reliability">Tracking: Reliability</option>
             </select>
             {pendingTxCount > 0 && (
-              <span className="px-3 py-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 text-[12px] text-amber-300">
-                Pending tx: {pendingTxCount}
-              </span>
+              <button
+                onClick={() => {
+                  if (confirm(`Clear ${pendingTxCount} pending transaction(s)? This only clears local tracking - check your wallet for actual status.`)) {
+                    window.localStorage.removeItem('geopredict_pending_txs_v1');
+                    setPendingTxCount(0);
+                    window.dispatchEvent(new CustomEvent('geopredict:pending-transactions-changed'));
+                  }
+                }}
+                className="px-3 py-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 text-[12px] text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer"
+              >
+                Pending tx: {pendingTxCount} ✕
+              </button>
             )}
             <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-1">
               <button
@@ -351,7 +365,7 @@ export default function Home() {
                         <p className="text-[15px] text-white/90 mt-3 leading-snug min-h-[64px]">{market.question}</p>
                         <div className="mt-4 space-y-1.5">
                           <p className="text-[12px] text-white/35">Resolves {market.deadline.toLocaleDateString()}</p>
-                          <p className="text-[12px] text-white/35">Pool {formatAmount(pool)}</p>
+                          <p className="text-[12px] text-white/35">Pool {formatAmount(pool)}{pool > 0 ? ` (Yes: ${formatAmount(market.totalYes)} · No: ${formatAmount(market.totalNo)})` : ''}</p>
                         </div>
                         <div className="mt-4">
                           <div className="flex justify-between text-[12px] mb-2">

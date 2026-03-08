@@ -107,6 +107,15 @@ export function pickCreditsRecord(
   return null;
 }
 
+export function sumCreditsRecords(records: unknown[]): number {
+  return records.reduce<number>((sum, entry) => {
+    const record = extractRecordPlaintext(entry);
+    if (!record) return sum;
+    const amount = extractRecordAmountMicrocredits(record);
+    return sum + (amount ?? 0);
+  }, 0);
+}
+
 export function pickBetRecord(
   records: unknown[],
   marketId: string,

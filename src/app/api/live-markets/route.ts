@@ -198,9 +198,8 @@ function buildMarket(params: {
   sourceUrl?: string;
   locationTokens: LocationToken[];
 }): Market & { __score: number } {
-  const { source, id, question, yesProbability, notionalPool, deadline, score, sourceUrl, locationTokens } = params;
+  const { source, id, question, yesProbability, deadline, score, sourceUrl, locationTokens } = params;
   const coords = inferCoords(question, `${source}:${id}:${question}`, locationTokens);
-  const safePool = Number.isFinite(notionalPool) && notionalPool > 0 ? notionalPool : 0;
   const clampedProb = clamp01(yesProbability);
 
   return {
@@ -211,8 +210,9 @@ function buildMarket(params: {
     category: categoryFromTitle(question),
     question,
     deadline,
-    totalYes: safePool * clampedProb,
-    totalNo: safePool * (1 - clampedProb),
+    // GeoPredict pool starts at 0; on-chain totals fetched separately if chainTracked
+    totalYes: 0,
+    totalNo: 0,
     outcome: 0,
     yesProbability: clampedProb,
     source,

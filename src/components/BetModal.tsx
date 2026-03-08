@@ -7,7 +7,8 @@ import { type Market, calcParimutuelPayout, calcTradeImpact, formatAmount } from
 import { toMicrocredits, TOKEN } from '@/lib/token';
 import { APP_NETWORK, PROGRAM_ID } from './WalletProvider';
 import { ALEO_API } from '@/lib/markets';
-import { pickCreditsRecord } from '@/lib/aleoRecords';
+import { pickCreditsRecord, sumCreditsRecords } from '@/lib/aleoRecords';
+import PrivacyIndicator from './PrivacyIndicator';
 import {
   markPendingTransactionConfirmed,
   markPendingTransactionFailed,
@@ -103,7 +104,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     plaintextRecords: unknown[];
     warning?: string;
   }> => {
-    const recordTimeoutMs = isLeoWallet ? 60_000 : 15_000;
+    const recordTimeoutMs = isLeoWallet ? 30_000 : 10_000;
 
     // Leo performs best with encrypted records first. Avoid blocking on plaintext fetch when encrypted records exist.
     if (isLeoWallet) {
@@ -204,7 +205,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       historyProgram: PROGRAM_ID,
       requestTransactionHistory,
       maxAttempts,
-      intervalMs: 2_000,
+      intervalMs: 1_500,
       onExplorerTxId: (nextId) => setTxId(nextId),
     });
 
@@ -254,7 +255,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     let submittedIdForFailure: string | null = null;
     let recordsWarningNotified = false;
     try {
-      const resolveStakeRecord = async (): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number }> => {
+      const resolveStakeRecord = async (): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number; totalPrivate: number }> => {
         const {
           encryptedRecords: nonPlainRecords,
           plaintextRecords: availableCreditsRecords,
@@ -264,18 +265,20 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
           appendFeeNotice(warning);
           recordsWarningNotified = true;
         }
+        const allRecords = [...(Array.isArray(availableCreditsRecords) ? availableCreditsRecords : []), ...(Array.isArray(nonPlainRecords) ? nonPlainRecords : [])];
         return {
           stakeRecord:
             pickCreditsRecord(availableCreditsRecords, parsedUnits) ??
             pickCreditsRecord(nonPlainRecords, parsedUnits),
           plainCount: Array.isArray(availableCreditsRecords) ? availableCreditsRecords.length : 0,
           encryptedCount: Array.isArray(nonPlainRecords) ? nonPlainRecords.length : 0,
+          totalPrivate: sumCreditsRecords(allRecords),
         };
       };
       const waitForStakeRecord = async (
         attempts: number,
         intervalMs: number,
-      ): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number }> => {
+      ): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number; totalPrivate: number }> => {
         let latest = await resolveStakeRecord();
         if (latest.stakeRecord) return latest;
         for (let i = 0; i < attempts; i += 1) {
@@ -286,10 +289,21 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
         return latest;
       };
 
-      let { stakeRecord, plainCount, encryptedCount } = await resolveStakeRecord();
+      let { stakeRecord, plainCount, encryptedCount, totalPrivate } = await resolveStakeRecord();
+      
+      // Check if user has enough total balance before attempting conversion
+      const publicBalance = address ? await fetchPublicCreditsBalance(address) : 0;
+      const totalAvailable = totalPrivate + (publicBalance ?? 0);
+      const feeBuffer = 100_000; // 0.1 credits for fees
+      if (totalAvailable < parsedUnits + feeBuffer) {
+        setStatus('error');
+        setError(`Insufficient balance. You have ${(totalAvailable / 1_000_000).toFixed(2)} credits but need ${((parsedUnits + feeBuffer) / 1_000_000).toFixed(2)} (including fees). Use the Faucet in Shield Wallet to get testnet credits.`);
+        return;
+      }
+
       let conversionError = '';
       let conversionWalletTxId: string | null = null;
-      if (!stakeRecord && address) {
+      if (!stakeRecord && address && (publicBalance ?? 0) > 0) {
         setPendingMessage('Converting public credits to private and syncing wallet records...');
         const receiverCandidates = [`${address}.private`, address];
         for (const receiverInput of receiverCandidates) {
@@ -306,7 +320,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
             try {
               conversionTx = await withTimeout(
                 submitConversion(usePrivateFee),
-                60_000,
+                30_000,
                 `${walletName} did not return conversion tx id in time. Waiting for wallet sync...`,
               );
             } catch (conversionErr) {
@@ -316,7 +330,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
               }
               conversionTx = await withTimeout(
                 submitConversion(false),
-                60_000,
+                30_000,
                 `${walletName} did not return conversion tx id in time. Waiting for wallet sync...`,
               );
               appendFeeNotice('Private fee unavailable for wallet top-up, so conversion used public fee.');
@@ -326,39 +340,38 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
               conversionWalletTxId = conversionTxId;
               setTxId(conversionTxId);
               // Do not block bet flow on conversion explorer lookup; record sync is the source of truth here.
-              void resolveExplorerTxId(conversionTxId, isShieldWallet ? 45 : 70).catch(() => undefined);
+              void resolveExplorerTxId(conversionTxId, isShieldWallet ? 30 : 45).catch(() => undefined);
             }
             if (conversionTx?.transactionId) {
               setPendingMessage('Waiting for converted private record to become available...');
-              const next = await waitForStakeRecord(isShieldWallet ? 12 : 90, 2_000);
+              const next = await waitForStakeRecord(isShieldWallet ? 8 : 45, 1_500);
               stakeRecord = next.stakeRecord;
               plainCount = next.plainCount;
               encryptedCount = next.encryptedCount;
+              totalPrivate = next.totalPrivate;
             } else {
-              const next = await waitForStakeRecord(isShieldWallet ? 6 : 30, 2_000);
+              const next = await waitForStakeRecord(isShieldWallet ? 4 : 20, 1_500);
               stakeRecord = next.stakeRecord;
               plainCount = next.plainCount;
               encryptedCount = next.encryptedCount;
+              totalPrivate = next.totalPrivate;
             }
             if (stakeRecord) break;
           } catch (conversionErr) {
             const nextMessage = conversionErr instanceof Error ? conversionErr.message : 'unknown conversion error';
             conversionError = conversionError ? `${conversionError} | ${nextMessage}` : nextMessage;
-            const next = await waitForStakeRecord(isShieldWallet ? 6 : 30, 2_000);
+            const next = await waitForStakeRecord(isShieldWallet ? 4 : 15, 1_500);
             stakeRecord = next.stakeRecord;
             plainCount = next.plainCount;
             encryptedCount = next.encryptedCount;
+            totalPrivate = next.totalPrivate;
             if (stakeRecord) break;
           }
         }
       }
 
       if (!stakeRecord) {
-        const publicBalance = address ? await fetchPublicCreditsBalance(address) : null;
-        const balanceDetail =
-          publicBalance === null
-            ? ''
-            : ` Public account balance: ${publicBalance} microcredits.`;
+        const balanceDetail = ` Private: ${(totalPrivate / 1_000_000).toFixed(2)}, Public: ${((publicBalance ?? 0) / 1_000_000).toFixed(2)} credits.`;
         if (conversionWalletTxId) {
           setRelayPendingId(conversionWalletTxId);
           setStatus('error');
@@ -495,14 +508,18 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
 
               {payout && impact && (
                 <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-2 text-[12px]">
-                  <div className="flex justify-between text-white/50"><span>Est. payout</span><span className="text-white/90 font-medium">{formatAmount(payout.payout)}</span></div>
-                  <div className="flex justify-between text-white/50"><span>Est. profit</span><span className="text-emerald-400 font-medium">+{formatAmount(payout.profit)}</span></div>
-                  <div className="flex justify-between text-white/50"><span>Odds shift</span><span className="text-white/70">{impact.beforeOdds}% → {impact.afterOdds}%</span></div>
-                  <div className="flex justify-between text-white/50"><span>Slippage</span><span className="text-amber-400">{impact.slippagePct} pp</span></div>
-                  <div className="flex justify-between text-white/50"><span>Pool depth</span><span className="text-white/70">{formatAmount(impact.poolDepth)}</span></div>
-                  <p className="text-[11px] text-white/30 pt-1 border-t border-white/[0.04]">payout = stake + (stake / winner_pool) × loser_pool</p>
+                  <div className="flex justify-between text-white/50"><span>Est. payout if you win</span><span className="text-white/90 font-medium">{formatAmount(payout.payout)}</span></div>
+                  <div className="flex justify-between text-white/50"><span>Est. profit</span><span className={payout.profit > 0 ? "text-emerald-400 font-medium" : "text-white/50"}>+{formatAmount(payout.profit)}{payout.profit === 0 && impact.poolDepth === 0 ? ' (first bet)' : ''}</span></div>
+                  <div className="flex justify-between text-white/50"><span>Your share of winner pool</span><span className="text-white/70">{payout.winnerPoolAfter > 0 ? ((stakeNum / payout.winnerPoolAfter) * 100).toFixed(1) : 100}%</span></div>
+                  <div className="flex justify-between text-white/50"><span>Loser pool to split</span><span className="text-white/70">{formatAmount(payout.loserPoolAfter)}</span></div>
+                  {impact.poolDepth === 0 && (
+                    <p className="text-[11px] text-amber-300/70 pt-1 border-t border-white/[0.04]">🎯 First bet on this market! Your profit depends on opposing bets.</p>
+                  )}
+                  <p className="text-[11px] text-white/30 pt-1 border-t border-white/[0.04]">Formula: payout = stake + (stake ÷ winner_pool) × loser_pool</p>
                 </div>
               )}
+
+              <PrivacyIndicator context="bet" position={position} amount={stakeNum > 0 ? stakeNum : undefined} />
 
               <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
                 <input
@@ -541,6 +558,15 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
           <div className="text-center py-8">
             <p className="text-white/70 mb-2">{txId.startsWith('at') ? 'Finalizing explorer confirmation...' : `Waiting for ${walletName} relay...`}</p>
             {txId && <p className="text-[11px] text-white/30 font-mono break-all px-2">{txId}</p>}
+            {txId && !txId.startsWith('at') && (
+              <p className="text-[11px] text-amber-300/70 mt-3">Check your wallet for transaction status</p>
+            )}
+            <button
+              onClick={() => { setStatus('idle'); setError(''); }}
+              className="mt-4 px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-xl text-sm text-white/50 transition-all"
+            >
+              Cancel
+            </button>
           </div>
         )}
         {status === 'success' && (

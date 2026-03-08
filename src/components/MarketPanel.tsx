@@ -16,11 +16,25 @@ interface MarketPanelProps {
 export default function MarketPanel({ market, onClose, myYesStake = 0, myNoStake = 0, onBetPlaced }: MarketPanelProps) {
   const [betPosition, setBetPosition] = useState<1 | 2 | null>(null);
   const [showClaim, setShowClaim] = useState(false);
+  const [hasClaimed, setHasClaimed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const claimed = window.localStorage.getItem('geopredict_claimed_v1');
+    return claimed ? JSON.parse(claimed).includes(market.id) : false;
+  });
   const odds = calcOdds(market);
   const poolDepth = market.totalYes + market.totalNo;
   const isResolved = market.outcome !== 0;
   const winningStake = market.outcome === 1 ? myYesStake : market.outcome === 2 ? myNoStake : 0;
-  const canClaim = isResolved;
+  const canClaim = isResolved && !hasClaimed;
+
+  const markAsClaimed = () => {
+    const claimed = JSON.parse(window.localStorage.getItem('geopredict_claimed_v1') || '[]');
+    if (!claimed.includes(market.id)) {
+      claimed.push(market.id);
+      window.localStorage.setItem('geopredict_claimed_v1', JSON.stringify(claimed));
+    }
+    setHasClaimed(true);
+  };
 
   return (
     <>
@@ -49,11 +63,23 @@ export default function MarketPanel({ market, onClose, myYesStake = 0, myNoStake
             </p>
           )}
 
-          <div className="mt-4 flex gap-3 text-[12px]">
-            <span className="px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/50">Pool: {formatAmount(poolDepth)}</span>
-            <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">Yes: {formatAmount(market.totalYes)}</span>
-            <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">No: {formatAmount(market.totalNo)}</span>
-          </div>
+          {!market.chainTracked && poolDepth === 0 && market.yesProbability !== undefined && (
+            <div className="mt-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <p className="text-[12px] text-white/50">
+                <span className="text-white/70 font-medium">{Math.round(market.yesProbability * 100)}% Yes</span> on {market.source === 'polymarket' ? 'Polymarket' : market.source === 'manifold' ? 'Manifold' : 'source'}
+              </p>
+              <p className="text-[11px] text-white/30 mt-1">GeoPredict pool: 0 · Be first to bet on Aleo</p>
+            </div>
+          )}
+          {(market.chainTracked || poolDepth > 0) && (
+            <div className="mt-4 flex gap-3 text-[12px] flex-wrap">
+              <span className="px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/50">
+                On-chain pool: {formatAmount(poolDepth)}
+              </span>
+              <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">Yes: {formatAmount(market.totalYes)}</span>
+              <span className="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">No: {formatAmount(market.totalNo)}</span>
+            </div>
+          )}
 
           {isResolved ? (
             <>
@@ -62,13 +88,19 @@ export default function MarketPanel({ market, onClose, myYesStake = 0, myNoStake
                 <p className="text-2xl font-semibold text-white mt-2">{market.outcome === 1 ? '✓ Yes' : '✗ No'}</p>
                 <p className="text-[12px] text-white/40 mt-2">Your winning stake: {formatAmount(winningStake)}</p>
               </div>
-              <button
-                onClick={() => setShowClaim(true)}
-                disabled={!canClaim}
-                className="w-full mt-4 py-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-2xl font-medium text-amber-400 transition-all disabled:opacity-50"
-              >
-                🏆 Claim Winnings
-              </button>
+              {hasClaimed ? (
+                <div className="w-full mt-4 py-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl font-medium text-emerald-400 text-center">
+                  ✓ Winnings Claimed
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowClaim(true)}
+                  disabled={!canClaim}
+                  className="w-full mt-4 py-4 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-2xl font-medium text-amber-400 transition-all disabled:opacity-50"
+                >
+                  🏆 Claim Winnings
+                </button>
+              )}
               <p className="text-[12px] text-white/35 mt-2">Claim uses wallet bet records. Local stake shown above is only a browser-side hint.</p>
             </>
           ) : (
@@ -106,7 +138,7 @@ export default function MarketPanel({ market, onClose, myYesStake = 0, myNoStake
           onSuccess={(stake) => { setBetPosition(null); onBetPlaced?.(betPosition, stake); }}
         />
       )}
-      {showClaim && <ClaimModal market={market} stakeHint={winningStake} onClose={() => setShowClaim(false)} />}
+      {showClaim && <ClaimModal market={market} stakeHint={winningStake} onClose={() => setShowClaim(false)} onSuccess={markAsClaimed} />}
     </>
   );
 }
