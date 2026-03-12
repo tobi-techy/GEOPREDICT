@@ -61,6 +61,8 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
   const [error, setError] = useState('');
   const [txId, setTxId] = useState('');
   const [relayPendingId, setRelayPendingId] = useState<string | null>(null);
+  // When set, "Try Again" will re-poll for the private record then place the bet
+  const [pendingConversionStake, setPendingConversionStake] = useState<number | null>(null);
   const [trackingMode, setTrackingMode] = useState<TrackingMode>('privacy');
   const [usePrivateFee, setUsePrivateFee] = useState(false);
   const [feeNotice, setFeeNotice] = useState('');
@@ -85,7 +87,6 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
 
   const walletName = wallet?.adapter?.name ?? 'Wallet';
   const isShieldWallet = walletName.toLowerCase().includes('shield');
-  const isLeoWallet = walletName.toLowerCase().includes('leo');
   const withTimeout = async <T,>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -104,99 +105,29 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     plaintextRecords: unknown[];
     warning?: string;
   }> => {
-    const recordTimeoutMs = isLeoWallet ? 30_000 : 10_000;
-
-    // Leo performs best with encrypted records first. Avoid blocking on plaintext fetch when encrypted records exist.
-    if (isLeoWallet) {
-      try {
-        const encryptedOnly = await withTimeout(
-          requestRecords(program, false),
-          recordTimeoutMs,
-          `${walletName} timed out while requesting encrypted records for ${program}.`,
-        );
-        if (Array.isArray(encryptedOnly) && encryptedOnly.length > 0) {
-          return { encryptedRecords: encryptedOnly, plaintextRecords: [] };
-        }
-      } catch {
-        // Continue to dual-path fallback below.
-      }
-    }
-
+    const recordTimeoutMs = 10_000;
     let lastError: Error | null = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      let encryptedRecords: unknown[] = [];
-      let plaintextRecords: unknown[] = [];
-      let encryptedError: unknown = null;
-      let plaintextError: unknown = null;
-
       const [encryptedResult, plaintextResult] = await Promise.allSettled([
-        withTimeout(
-          requestRecords(program, false),
-          recordTimeoutMs,
-          `${walletName} timed out while requesting encrypted records for ${program}.`,
-        ),
-        withTimeout(
-          requestRecords(program, true),
-          recordTimeoutMs,
-          `${walletName} timed out while requesting plaintext records for ${program}.`,
-        ),
+        withTimeout(requestRecords(program, false), recordTimeoutMs, `${walletName} timed out fetching encrypted records.`),
+        withTimeout(requestRecords(program, true), recordTimeoutMs, `${walletName} timed out fetching plaintext records.`),
       ]);
-
-      if (encryptedResult.status === 'fulfilled') {
-        encryptedRecords = encryptedResult.value;
-      } else {
-        encryptedError = encryptedResult.reason;
-      }
-
-      if (plaintextResult.status === 'fulfilled') {
-        plaintextRecords = plaintextResult.value;
-      } else {
-        plaintextError = plaintextResult.reason;
-      }
-
-      if (encryptedError && plaintextError) {
-        const encryptedMessage =
-          encryptedError instanceof Error ? encryptedError.message : 'unknown encrypted-record error';
-        const plaintextMessage =
-          plaintextError instanceof Error ? plaintextError.message : 'unknown plaintext-record error';
-        lastError = new Error(
-          `Failed to request records for ${program}. Encrypted path: ${encryptedMessage}. Plaintext path: ${plaintextMessage}.`,
-        );
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 1_000));
-          continue;
-        }
+      const encryptedRecords = encryptedResult.status === 'fulfilled' ? (encryptedResult.value ?? []) : [];
+      const plaintextRecords = plaintextResult.status === 'fulfilled' ? (plaintextResult.value ?? []) : [];
+      if (encryptedResult.status === 'rejected' && plaintextResult.status === 'rejected') {
+        lastError = new Error(`Failed to request records: ${encryptedResult.reason instanceof Error ? encryptedResult.reason.message : 'unknown'}`);
+        if (attempt < 2) { await new Promise(r => setTimeout(r, 1_000)); continue; }
         throw lastError;
       }
-
-      if (encryptedError && !plaintextError) {
-        const message = encryptedError instanceof Error ? encryptedError.message : 'unknown encrypted-record error';
-        return {
-          encryptedRecords: [],
-          plaintextRecords: Array.isArray(plaintextRecords) ? plaintextRecords : [],
-          warning: `${walletName} denied encrypted records (${message}); using plaintext records only.`,
-        };
-      }
-
-      if (!encryptedError && plaintextError) {
-        const message = plaintextError instanceof Error ? plaintextError.message : 'unknown plaintext-record error';
-        return {
-          encryptedRecords: Array.isArray(encryptedRecords) ? encryptedRecords : [],
-          plaintextRecords: [],
-          warning: `${walletName} denied plaintext records (${message}); using encrypted records only.`,
-        };
-      }
-
       return {
         encryptedRecords: Array.isArray(encryptedRecords) ? encryptedRecords : [],
         plaintextRecords: Array.isArray(plaintextRecords) ? plaintextRecords : [],
       };
     }
-
     throw lastError ?? new Error(`Failed to request records for ${program}.`);
   };
 
-  const resolveExplorerTxId = async (submittedId: string, maxAttempts = 90): Promise<string> =>
+  const resolveExplorerTxId = async (submittedId: string, maxAttempts = 120): Promise<string> =>
     resolveOnchainTransactionId({
       walletTxId: submittedId,
       aleoApi: ALEO_API,
@@ -205,8 +136,11 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       historyProgram: PROGRAM_ID,
       requestTransactionHistory,
       maxAttempts,
-      intervalMs: 1_500,
+      intervalMs: 3_000,
       onExplorerTxId: (nextId) => setTxId(nextId),
+      address: address ?? undefined,
+      functionName: 'place_bet',
+      submittedAt: Date.now(),
     });
 
   const handleReconnectPermissions = async () => {
@@ -340,17 +274,17 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
               conversionWalletTxId = conversionTxId;
               setTxId(conversionTxId);
               // Do not block bet flow on conversion explorer lookup; record sync is the source of truth here.
-              void resolveExplorerTxId(conversionTxId, isShieldWallet ? 30 : 45).catch(() => undefined);
+              void resolveExplorerTxId(conversionTxId, 30).catch(() => undefined);
             }
             if (conversionTx?.transactionId) {
               setPendingMessage('Waiting for converted private record to become available...');
-              const next = await waitForStakeRecord(isShieldWallet ? 8 : 45, 1_500);
+              const next = await waitForStakeRecord(20, 2_000);
               stakeRecord = next.stakeRecord;
               plainCount = next.plainCount;
               encryptedCount = next.encryptedCount;
               totalPrivate = next.totalPrivate;
             } else {
-              const next = await waitForStakeRecord(isShieldWallet ? 4 : 20, 1_500);
+              const next = await waitForStakeRecord(10, 2_000);
               stakeRecord = next.stakeRecord;
               plainCount = next.plainCount;
               encryptedCount = next.encryptedCount;
@@ -360,7 +294,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
           } catch (conversionErr) {
             const nextMessage = conversionErr instanceof Error ? conversionErr.message : 'unknown conversion error';
             conversionError = conversionError ? `${conversionError} | ${nextMessage}` : nextMessage;
-            const next = await waitForStakeRecord(isShieldWallet ? 4 : 15, 1_500);
+            const next = await waitForStakeRecord(10, 2_000);
             stakeRecord = next.stakeRecord;
             plainCount = next.plainCount;
             encryptedCount = next.encryptedCount;
@@ -374,9 +308,10 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
         const balanceDetail = ` Private: ${(totalPrivate / 1_000_000).toFixed(2)}, Public: ${((publicBalance ?? 0) / 1_000_000).toFixed(2)} credits.`;
         if (conversionWalletTxId) {
           setRelayPendingId(conversionWalletTxId);
+          setPendingConversionStake(parsedUnits);
           setStatus('error');
           setError(
-            `Conversion transaction was submitted but private record is still syncing in ${walletName}. Once wallet shows it as successful, click "Try Again" to place the bet.${balanceDetail}`,
+            `Conversion transaction was submitted but private record is still syncing in ${walletName}. Click "Try Again" to re-poll for the record and place the bet.${balanceDetail}`,
           );
           return;
         }
@@ -389,24 +324,40 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
         return;
       }
 
-      setPendingMessage('Submitting bet to Aleo Testnet...');
-      const inputs = [stakeRecord, market.fieldId, `${position}u8`, `${parsedUnits}u64`];
-      const submitBet = async (privateFee: boolean) => executeTransaction({
+      setPendingMessage('Generating ZK proof... This can take 2-5 minutes. Check Shield Wallet for status.');
+      const submitBet = async (record: string, privateFee: boolean) => executeTransaction({
         program: PROGRAM_ID,
         function: 'place_bet',
-        inputs,
-        fee: 50_000,
+        inputs: [record, market.fieldId, `${position}u8`, `${parsedUnits}u64`],
+        fee: 200_000,
         privateFee,
       });
 
       let result;
-      try {
-        result = await submitBet(usePrivateFee);
-      } catch (txErr) {
-        if (!usePrivateFee) throw txErr;
-        // Fall back to public fee if a private fee record is unavailable.
-        result = await submitBet(false);
-        appendFeeNotice('Private fee unavailable for bet, so transaction used public fee.');
+      let usedRecord = stakeRecord;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          try {
+            result = await submitBet(usedRecord, usePrivateFee);
+          } catch (txErr) {
+            if (!usePrivateFee) throw txErr;
+            result = await submitBet(usedRecord, false);
+            appendFeeNotice('Private fee unavailable for bet, so transaction used public fee.');
+          }
+          break; // success
+        } catch (txErr) {
+          const msg = txErr instanceof Error ? txErr.message : '';
+          if (/already exists in the ledger/i.test(msg) && attempt < 2) {
+            setPendingMessage(`Record already spent, fetching fresh record (attempt ${attempt + 2}/3)...`);
+            await new Promise(r => setTimeout(r, 3_000));
+            const fresh = await resolveStakeRecord();
+            if (fresh.stakeRecord && fresh.stakeRecord !== usedRecord) {
+              usedRecord = fresh.stakeRecord;
+              continue;
+            }
+          }
+          throw txErr;
+        }
       }
       const submittedId = result?.transactionId ?? '';
       if (!submittedId) throw new Error('Wallet did not return a transaction ID.');
@@ -439,6 +390,10 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
         );
         return;
       }
+      if (/already exists in the ledger/i.test(message)) {
+        setError('All available records are already spent. Open Shield Wallet, wait for sync to complete, then try again.');
+        return;
+      }
       if (isAllowedProgramError(err)) {
         setNeedsProgramReconnect(true);
         setError('Wallet session is missing permission for geopredict_private_v3.aleo. Reconnect wallet permissions, then retry.');
@@ -462,8 +417,9 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     if (!relayPendingId) return;
     setStatus('confirming');
     setError('');
+    setPendingMessage('Checking on-chain for your bet...');
     try {
-      const resolvedTxId = await resolveExplorerTxId(relayPendingId, 45);
+      const resolvedTxId = await resolveExplorerTxId(relayPendingId, 60);
       setTxId(resolvedTxId);
       markPendingTransactionConfirmed(relayPendingId, resolvedTxId);
       setRelayPendingId(null);
@@ -471,13 +427,63 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       setTimeout(() => onSuccess(stakeNum), 1200);
     } catch (err) {
       setStatus('error');
-      const message = err instanceof Error ? err.message : 'Transaction confirmation failed';
       if (err instanceof RelayPendingError) {
-        setError('Still waiting for wallet relay. Retry again in a few seconds.');
+        setError('Still not indexed yet. Keep checking — Shield Wallet may take 10+ minutes to relay.');
         return;
       }
+      const message = err instanceof Error ? err.message : 'Transaction confirmation failed';
       markPendingTransactionFailed(relayPendingId, message);
       setError(message);
+    }
+  };
+
+  // Re-poll for the private record after a conversion and then place the bet
+  const handleRetryAfterConversion = async () => {
+    if (!pendingConversionStake) { setStatus('idle'); return; }
+    setStatus('pending');
+    setError('');
+    setPendingMessage('Re-checking wallet for converted private record...');
+    try {
+      let stakeRecord: string | null = null;
+      for (let i = 0; i < 40; i++) {
+        const { encryptedRecords, plaintextRecords } = await (async () => {
+          try { return await loadProgramRecords('credits.aleo'); } catch { return { encryptedRecords: [], plaintextRecords: [] }; }
+        })();
+        stakeRecord = pickCreditsRecord(plaintextRecords as never[], pendingConversionStake) ?? pickCreditsRecord(encryptedRecords as never[], pendingConversionStake) ?? null;
+        if (stakeRecord) break;
+        if (i < 39) await new Promise(r => setTimeout(r, 2_000));
+      }
+      if (!stakeRecord) {
+        setStatus('error');
+        setError('Private record still not visible in wallet. Wait a minute and try again, or manually create a private credits record in your wallet.');
+        return;
+      }
+      setPendingMessage('Submitting bet to Aleo Testnet...');
+      const submitBet = async (privateFee: boolean) => executeTransaction({
+        program: PROGRAM_ID,
+        function: 'place_bet',
+        inputs: [stakeRecord!, market.fieldId, `${position}u8`, `${pendingConversionStake}u64`],
+        fee: 50_000,
+        privateFee,
+      });
+      let result;
+      try { result = await submitBet(usePrivateFee); } catch { result = await submitBet(false); }
+      const submittedId = result?.transactionId ?? '';
+      if (!submittedId) throw new Error('Wallet did not return a transaction ID.');
+      setTxId(submittedId);
+      setRelayPendingId(submittedId);
+      setPendingConversionStake(null);
+      upsertPendingTransaction({ walletTxId: submittedId, status: 'pending', kind: 'bet', program: PROGRAM_ID, functionName: 'place_bet', marketId: market.id, createdAt: Date.now(), updatedAt: Date.now() });
+      setStatus('confirming');
+      const resolvedTxId = await resolveExplorerTxId(submittedId);
+      setTxId(resolvedTxId);
+      setRelayPendingId(null);
+      markPendingTransactionConfirmed(submittedId, resolvedTxId);
+      setStatus('success');
+      setTimeout(() => onSuccess(pendingConversionStake / 1_000_000), 1200);
+    } catch (err) {
+      setStatus('error');
+      setError(err instanceof Error ? err.message : 'Transaction failed');
     }
   };
 
@@ -572,7 +578,23 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
         {status === 'success' && (
           <div className="text-center py-8">
             <p className="text-emerald-300 font-medium mb-2">✓ Bet confirmed on-chain</p>
-            {txId && <p className="text-[11px] text-white/30 font-mono break-all px-2">{txId}</p>}
+            {txId && (
+              <>
+                <a
+                  href={`${ALEO_API}/transaction/${txId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-emerald-400/70 hover:text-emerald-400 font-mono break-all px-2 underline underline-offset-2"
+                >
+                  {txId}
+                </a>
+                <div className="mt-4 mx-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-left">
+                  <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-2">🔒 ZK Proof Generated</p>
+                  <p className="text-[11px] text-white/50 leading-relaxed">Your bet was executed as a <span className="text-emerald-400">private Aleo record</span>. The zero-knowledge proof verifies you had sufficient credits without revealing your position or stake amount to anyone on-chain.</p>
+                  <p className="text-[11px] text-white/30 mt-2 font-mono break-all">proof: {txId.slice(0, 20)}…</p>
+                </div>
+              </>
+            )}
           </div>
         )}
         {status === 'error' && (
@@ -595,7 +617,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
                 Check On-Chain Again
               </button>
             )}
-            <button onClick={() => setStatus('idle')} className="mt-3 px-6 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-sm text-white/60 transition-all">Try Again</button>
+            <button onClick={pendingConversionStake ? handleRetryAfterConversion : () => { setPendingConversionStake(null); setStatus('idle'); }} className="mt-3 px-6 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-sm text-white/60 transition-all">Try Again</button>
           </div>
         )}
       </div>

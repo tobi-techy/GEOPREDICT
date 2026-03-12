@@ -139,7 +139,7 @@ export default function ClaimModal({ market, stakeHint, onClose, onSuccess }: Cl
     throw lastError ?? new Error(`Failed to request records for ${program}.`);
   };
 
-  const resolveExplorerTxId = async (submittedId: string, maxAttempts = 90): Promise<string> =>
+  const resolveExplorerTxId = async (submittedId: string, maxAttempts = 120): Promise<string> =>
     resolveOnchainTransactionId({
       walletTxId: submittedId,
       aleoApi: ALEO_API,
@@ -148,8 +148,11 @@ export default function ClaimModal({ market, stakeHint, onClose, onSuccess }: Cl
       historyProgram: PROGRAM_ID,
       requestTransactionHistory,
       maxAttempts,
-      intervalMs: 1_500,
+      intervalMs: 3_000,
       onExplorerTxId: (nextId) => setTxId(nextId),
+      address: address ?? undefined,
+      functionName: 'claim_winnings',
+      submittedAt: Date.now(),
     });
 
   const handleReconnectPermissions = async () => {
@@ -403,13 +406,24 @@ export default function ClaimModal({ market, stakeHint, onClose, onSuccess }: Cl
 
         {status === 'success' && (
           <div className="text-center py-8">
-            <p className="text-white font-medium mb-1">Winnings Claimed</p>
-            <p className="text-white/30 text-sm mb-6">Transaction confirmed on-chain</p>
+            <p className="text-white font-medium mb-1">🏆 Winnings Claimed</p>
+            <p className="text-white/30 text-sm mb-4">Transaction confirmed on-chain</p>
             {txId && (
-              <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-4 mb-4">
-                <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Transaction ID</p>
-                <p className="text-[13px] text-white/80 font-mono break-all">{txId}</p>
-              </div>
+              <>
+                <a
+                  href={`${ALEO_API}/transaction/${txId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block text-[11px] text-emerald-400/70 hover:text-emerald-400 font-mono break-all px-2 underline underline-offset-2 mb-4"
+                >
+                  {txId}
+                </a>
+                <div className="mx-4 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-left mb-4">
+                  <p className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-2">🔒 ZK Proof Generated</p>
+                  <p className="text-[11px] text-white/50 leading-relaxed">Your <span className="text-emerald-400">private Bet record</span> was consumed as proof of winning position. A random nonce prevents linking this claim to your original bet on-chain.</p>
+                  <p className="text-[11px] text-white/30 mt-2 font-mono break-all">proof: {txId.slice(0, 20)}…</p>
+                </div>
+              </>
             )}
             <button onClick={onClose} className="px-6 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-sm text-white/60 transition-all">Close</button>
           </div>

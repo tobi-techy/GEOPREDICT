@@ -3,7 +3,6 @@
 import { FC, ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { AleoWalletProvider as WalletProvider } from '@provablehq/aleo-wallet-adaptor-react';
 import { WalletModalProvider } from '@provablehq/aleo-wallet-adaptor-react-ui';
-import { LeoWalletAdapter } from '@provablehq/aleo-wallet-adaptor-leo';
 import { ShieldWalletAdapter } from '@provablehq/aleo-wallet-adaptor-shield';
 import { Network } from '@provablehq/aleo-types';
 import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
@@ -19,7 +18,7 @@ export const APP_NETWORK = Network.TESTNET;
 export const PROGRAM_ID = 'geopredict_private_v3.aleo';
 
 const Inner: FC<{ children: ReactNode }> = ({ children }) => {
-  const wallets = useMemo(() => [new ShieldWalletAdapter(), new LeoWalletAdapter()], []);
+  const wallets = useMemo(() => [new ShieldWalletAdapter()], []);
   const [trackingMode, setTrackingMode] = useState<TrackingMode>(() =>
     typeof window === 'undefined' ? 'privacy' : readTrackingMode(),
   );
@@ -38,13 +37,15 @@ const Inner: FC<{ children: ReactNode }> = ({ children }) => {
   const handleWalletError = (error: Error) => {
     const message = error?.message ?? '';
     if (/onchain history permission required/i.test(message)) {
-      console.warn(
-        'Shield denied on-chain history. Switch to Reliability mode and reconnect wallet permissions.',
-      );
+      console.warn('Shield denied on-chain history. Switch to Reliability mode and reconnect wallet permissions.');
       return;
     }
     if (/unknown error occured|unknown error occurred/i.test(message)) {
       console.warn('Wallet reported a transient unknown error. Retrying flow is usually sufficient.');
+      return;
+    }
+    if (/could not establish connection|receiving end does not exist|no response/i.test(message)) {
+      console.warn('Wallet extension not reachable. Make sure Shield or Leo Wallet is installed and enabled, then reload the page.');
       return;
     }
     console.error(message);

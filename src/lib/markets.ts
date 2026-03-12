@@ -45,13 +45,7 @@ export interface WinProof {
 
 export function calcOdds(market: Market): { yes: number; no: number } {
   const total = market.totalYes + market.totalNo;
-  if (total === 0) {
-    if (typeof market.yesProbability === 'number' && market.yesProbability >= 0 && market.yesProbability <= 1) {
-      const yes = Math.round(market.yesProbability * 100);
-      return { yes, no: 100 - yes };
-    }
-    return { yes: 0, no: 0 };
-  }
+  if (total === 0) return { yes: 0, no: 0 };
   return {
     yes: Math.round((market.totalYes / total) * 100),
     no: Math.round((market.totalNo / total) * 100),

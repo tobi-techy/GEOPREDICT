@@ -27,6 +27,18 @@ function looksLikeRecord(value: string): boolean {
   );
 }
 
+/** Serialize a Shield-style record object back to Aleo plaintext string format */
+function serializeRecordObject(obj: Record<string, unknown>): string | null {
+  if (typeof obj.owner !== 'string') return null;
+  const lines = Object.entries(obj)
+    .filter(([k]) => k !== '_nonce' && k !== '_version')
+    .map(([k, v]) => `  ${k}: ${v}`);
+  // _nonce and _version go last as public fields
+  if ('_nonce' in obj) lines.push(`  _nonce: ${obj._nonce}`);
+  if ('_version' in obj) lines.push(`  _version: ${obj._version}`);
+  return `{\n${lines.join(',\n')}\n}`;
+}
+
 export function extractRecordPlaintext(candidate: unknown): string | null {
   const queue: unknown[] = [candidate];
   const seen = new Set<unknown>();
@@ -44,6 +56,14 @@ export function extractRecordPlaintext(candidate: unknown): string | null {
     }
 
     if (!isObject(current)) continue;
+
+    // Shield returns records where recordPlaintext may itself be a parsed object
+    if ('owner' in current && typeof current.owner === 'string' &&
+        ('microcredits' in current || 'amount' in current || 'market_id' in current)) {
+      const serialized = serializeRecordObject(current);
+      if (serialized) return serialized;
+    }
+
     for (const key of PREFERRED_RECORD_KEYS) {
       if (key in current) queue.push(current[key]);
     }
@@ -87,6 +107,8 @@ export function pickCreditsRecord(
 ): string | null {
   const normalized = records
     .map((entry) => {
+      // Filter spent records (Shield marks them with spent: true)
+      if (isObject(entry) && entry.spent === true) return null;
       const record = extractRecordPlaintext(entry);
       if (!record) return null;
       return {
@@ -109,6 +131,7 @@ export function pickCreditsRecord(
 
 export function sumCreditsRecords(records: unknown[]): number {
   return records.reduce<number>((sum, entry) => {
+    if (isObject(entry) && entry.spent === true) return sum;
     const record = extractRecordPlaintext(entry);
     if (!record) return sum;
     const amount = extractRecordAmountMicrocredits(record);

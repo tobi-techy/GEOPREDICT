@@ -128,6 +128,31 @@ async function explorerHasTx(aleoApi: string, txId: string): Promise<boolean> {
   }
 }
 
+async function findRecentTxForProgram(aleoApi: string, address: string, program: string, functionName: string, afterMs: number): Promise<string | null> {
+  try {
+    // Use v2 API transitions endpoint — v1 doesn't have address-level transition queries
+    const v2Base = aleoApi.replace('api.explorer.provable.com/v1', 'api.provable.com/v2');
+    const res = await fetch(`${v2Base}/transitions/${address}`);
+    if (!res.ok) return null;
+    const data = await res.json() as Array<{ transaction_id?: string; program_id?: string; function_id?: string; timestamp?: number; block_timestamp?: number }>;
+    if (!Array.isArray(data)) return null;
+    for (const item of data) {
+      const ts = (item.block_timestamp ?? 0) * 1000;
+      if (
+        item.program_id === program &&
+        item.function_id === functionName &&
+        item.transaction_id?.startsWith('at') &&
+        ts > afterMs
+      ) {
+        return item.transaction_id;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeStatus(status: string | undefined): string {
   return String(status ?? '').trim().toLowerCase();
 }
@@ -154,6 +179,9 @@ export async function resolveOnchainTransactionId(params: {
   maxAttempts?: number;
   intervalMs?: number;
   onExplorerTxId?: (txId: string) => void;
+  address?: string;
+  functionName?: string;
+  submittedAt?: number;
 }): Promise<string> {
   const {
     walletTxId,
@@ -165,32 +193,42 @@ export async function resolveOnchainTransactionId(params: {
     maxAttempts = 90,
     intervalMs = 2_000,
     onExplorerTxId,
+    address,
+    functionName,
+    submittedAt = Date.now(),
   } = params;
 
   let candidate = walletTxId;
-  
-  // Shield wallet returns temporary IDs like "shield_xxx" - these need special handling
-  const isTemporaryId = walletTxId.startsWith('shield_') || !walletTxId.startsWith('at');
-  // Use fewer attempts for temporary IDs since they need wallet confirmation
-  const effectiveMaxAttempts = isTemporaryId ? Math.min(maxAttempts, 20) : maxAttempts;
+  const isTemporaryId = !walletTxId.startsWith('at');
 
-  for (let i = 0; i < effectiveMaxAttempts; i += 1) {
+  for (let i = 0; i < maxAttempts; i += 1) {
     if (candidate.startsWith('at') && (await explorerHasTx(aleoApi, candidate))) {
       return candidate;
     }
 
+    // Every 5 attempts, try to find the tx directly on explorer by address+function
+    if (isTemporaryId && address && functionName && i % 5 === 0) {
+      const found = await findRecentTxForProgram(aleoApi, address, historyProgram ?? '', functionName, submittedAt - 300_000);
+      if (found) {
+        candidate = found;
+        onExplorerTxId?.(candidate);
+        if (await explorerHasTx(aleoApi, candidate)) return candidate;
+      }
+    }
+
+    // For temporary/relay IDs, transactionStatus may return misleading failed/error states.
+    // Always call it to get the real tx ID, but never treat failed/rejected as fatal for temp IDs.
     try {
       const status = await transactionStatus(walletTxId);
       const normalized = normalizeStatus(status.status);
 
       const explorerTxId = extractExplorerTxId(status);
-      if (explorerTxId) {
+      if (explorerTxId && explorerTxId.startsWith('at')) {
         candidate = explorerTxId;
         onExplorerTxId?.(candidate);
       }
-      if (status.error) throw new Error(status.error);
 
-      if (normalized === 'failed' || normalized === 'rejected') {
+      if ((normalized === 'failed' || normalized === 'rejected') && !isTemporaryId) {
         throw new Error(`Transaction ${normalized}${status.error ? `: ${status.error}` : ''}`);
       }
 
@@ -199,7 +237,7 @@ export async function resolveOnchainTransactionId(params: {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
-      if (!/not found|pending|timeout|unknown/i.test(message)) throw error;
+      if (!/not found|pending|timeout|unknown|relay/i.test(message)) throw error;
     }
 
     if (useHistory && historyProgram && requestTransactionHistory) {

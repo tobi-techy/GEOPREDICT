@@ -6,6 +6,10 @@ import ConnectButton from '@/components/ConnectButton';
 import MarketPanel from '@/components/MarketPanel';
 import VerifyProof from '@/components/VerifyProof';
 import PendingTxReconciler from '@/components/PendingTxReconciler';
+import RecentActivity from '@/components/RecentActivity';
+import YourBets from '@/components/YourBets';
+import HowItWorksModal from '@/components/HowItWorksModal';
+import Countdown from '@/components/Countdown';
 import { TOKEN } from '@/lib/token';
 import { ALEO_API, DEPLOYED_PROGRAM, DEPLOY_TX_ID, type Market, type MarketCategory, CATEGORY_LABELS, calcOdds, fetchAllMarketTotals, formatAmount } from '@/lib/markets';
 import {
@@ -26,6 +30,7 @@ type ApiMarket = Omit<Market, 'deadline'> & { deadline: string };
 type GridSourceFilter = 'all' | 'polymarket' | 'manifold';
 type GridStatusFilter = 'all' | 'open' | 'resolved';
 type GridSort = 'liquidity_desc' | 'deadline_asc' | 'deadline_desc';
+type GridDeadlineFilter = 'all' | '7' | '30' | '90';
 
 function hydrateApiMarket(market: ApiMarket): Market {
   const parsed = new Date(market.deadline);
@@ -49,6 +54,8 @@ export default function Home() {
   const [gridSourceFilter, setGridSourceFilter] = useState<GridSourceFilter>('all');
   const [gridStatusFilter, setGridStatusFilter] = useState<GridStatusFilter>('all');
   const [gridSort, setGridSort] = useState<GridSort>('liquidity_desc');
+  const [gridDeadlineFilter, setGridDeadlineFilter] = useState<GridDeadlineFilter>('all');
+  const [gridAleoOnly, setGridAleoOnly] = useState(false);
   const [myStakes, setMyStakes] = useState<StakeByMarket>(() => {
     if (typeof window === 'undefined') return {};
     try {
@@ -60,10 +67,21 @@ export default function Home() {
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showVerify, setShowVerify] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const marketsRef = useRef<Market[]>(markets);
 
   useEffect(() => {
     marketsRef.current = markets;
+    // URL deep link: once markets load, open market from ?market= param
+    if (markets.length > 0 && !selectedId) {
+      const params = new URLSearchParams(window.location.search);
+      const marketParam = params.get('market');
+      if (marketParam) {
+        const found = markets.find((m) => m.fieldId === marketParam || m.id === marketParam);
+        if (found) setSelectedId(found.id);
+      }
+    }
   }, [markets]);
 
   useEffect(() => {
@@ -127,12 +145,17 @@ export default function Home() {
   }, [filteredMarkets]);
   const gridMarkets = useMemo(() => {
     const query = gridQuery.trim().toLowerCase();
+    const now = Date.now();
     const byFilters = filteredMarkets.filter((market) => {
       if (gridSourceFilter !== 'all' && market.source !== gridSourceFilter) return false;
       if (gridStatusFilter === 'open' && market.outcome !== 0) return false;
       if (gridStatusFilter === 'resolved' && market.outcome === 0) return false;
+      if (gridAleoOnly && (market.totalYes + market.totalNo) === 0) return false;
+      if (gridDeadlineFilter !== 'all') {
+        const days = parseInt(gridDeadlineFilter);
+        if (market.deadline.getTime() - now > days * 86_400_000) return false;
+      }
       if (!query) return true;
-
       return (
         market.question.toLowerCase().includes(query) ||
         CATEGORY_LABELS[market.category].toLowerCase().includes(query) ||
@@ -149,7 +172,7 @@ export default function Home() {
       sorted.sort((a, b) => b.deadline.getTime() - a.deadline.getTime());
     }
     return sorted;
-  }, [filteredMarkets, gridQuery, gridSourceFilter, gridStatusFilter, gridSort]);
+  }, [filteredMarkets, gridQuery, gridSourceFilter, gridStatusFilter, gridSort, gridDeadlineFilter, gridAleoOnly]);
   const selectedMarket = selectedId ? filteredMarkets.find((m) => m.id === selectedId) ?? null : null;
 
   const handleBetPlaced = useCallback((marketId: string, position: 1 | 2, stake: number) => {
@@ -179,6 +202,9 @@ export default function Home() {
 
   const handleMarkerClick = useCallback((market: Market) => {
     setSelectedId(market.id);
+    const url = new URL(window.location.href);
+    url.searchParams.set('market', market.fieldId ?? market.id);
+    window.history.replaceState(null, '', url.toString());
   }, []);
 
   const toggleCategory = useCallback((category: MarketCategory) => {
@@ -193,6 +219,7 @@ export default function Home() {
   }, []);
 
   return (
+    <>
       <main className="h-screen flex flex-col bg-zinc-950">
         <header className="h-16 border-b border-white/[0.06] flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-xl z-10">
           <div className="flex items-center gap-3">
@@ -260,6 +287,12 @@ export default function Home() {
             </div>
             <button onClick={() => setShowVerify(!showVerify)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
               Verify Proof
+            </button>
+            <button onClick={() => setShowHowItWorks(true)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
+              How it works
+            </button>
+            <button onClick={() => setShowSidebar(!showSidebar)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
+              Activity
             </button>
             <ConnectButton />
           </div>
@@ -332,6 +365,22 @@ export default function Home() {
                         <option value="deadline_asc">Sort: Deadline soonest</option>
                         <option value="deadline_desc">Sort: Deadline latest</option>
                       </select>
+                      <select
+                        value={gridDeadlineFilter}
+                        onChange={(e) => setGridDeadlineFilter(e.target.value as GridDeadlineFilter)}
+                        className="rounded-xl border border-white/[0.12] bg-zinc-900/70 px-3 py-2 text-[12px] text-white/80 outline-none transition-all focus:border-emerald-400/40"
+                      >
+                        <option value="all">Any deadline</option>
+                        <option value="7">Closes in 7d</option>
+                        <option value="30">Closes in 30d</option>
+                        <option value="90">Closes in 90d</option>
+                      </select>
+                      <button
+                        onClick={() => setGridAleoOnly((v) => !v)}
+                        className={`px-3 py-2 rounded-xl border text-[12px] transition-all whitespace-nowrap ${gridAleoOnly ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-300' : 'border-white/[0.12] bg-zinc-900/70 text-white/60 hover:text-white/80'}`}
+                      >
+                        ⛓ Has Aleo bets
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -344,7 +393,12 @@ export default function Home() {
                   return (
                     <button
                       key={market.id}
-                      onClick={() => setSelectedId(market.id)}
+                      onClick={() => {
+                        setSelectedId(market.id);
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('market', market.fieldId ?? market.id);
+                        window.history.replaceState(null, '', url.toString());
+                      }}
                       className="group relative overflow-hidden text-left rounded-3xl border border-white/[0.08] bg-gradient-to-b from-white/[0.045] to-white/[0.015] p-5 md:p-6 transition-all hover:-translate-y-0.5 hover:border-white/[0.16] hover:shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
                     >
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-emerald-400/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
@@ -364,22 +418,32 @@ export default function Home() {
                         </div>
                         <p className="text-[15px] text-white/90 mt-3 leading-snug min-h-[64px]">{market.question}</p>
                         <div className="mt-4 space-y-1.5">
-                          <p className="text-[12px] text-white/35">Resolves {market.deadline.toLocaleDateString()}</p>
+                          <p className="text-[12px] text-white/35">
+                            {isResolved ? `Resolved ${market.deadline.toLocaleDateString()}` : <>Closes in <span className="text-white/55"><Countdown deadline={market.deadline} /></span></>}
+                          </p>
                           <p className="text-[12px] text-white/35">Pool {formatAmount(pool)}{pool > 0 ? ` (Yes: ${formatAmount(market.totalYes)} · No: ${formatAmount(market.totalNo)})` : ''}</p>
                         </div>
                         <div className="mt-4">
                           <div className="flex justify-between text-[12px] mb-2">
-                            <span className="text-white/35">Market odds</span>
-                            <span className="text-white/35">{odds.yes + odds.no}% tracked</span>
+                            <span className="text-white/50">⛓ Aleo pool</span>
+                            {pool > 0
+                              ? <span className="text-white/35">{formatAmount(pool)} staked</span>
+                              : <span className="text-white/25">No bets yet — be first</span>
+                            }
                           </div>
-                          <div className="flex justify-between text-[12px] mb-2">
-                          <span className="text-emerald-400">Yes {odds.yes}%</span>
-                          <span className="text-rose-400">No {odds.no}%</span>
-                          </div>
+                          {pool > 0 && (
+                            <div className="flex justify-between text-[12px] mb-2">
+                              <span className="text-emerald-400">Yes {odds.yes}%</span>
+                              <span className="text-rose-400">No {odds.no}%</span>
+                            </div>
+                          )}
                           <div className="h-1.5 rounded-full overflow-hidden bg-white/[0.06] flex">
-                            <div className="bg-emerald-500 h-full" style={{ width: `${odds.yes}%` }} />
-                            <div className="bg-rose-500 h-full" style={{ width: `${odds.no}%` }} />
+                            <div className="bg-emerald-500 h-full transition-all" style={{ width: `${odds.yes}%` }} />
+                            <div className="bg-rose-500 h-full transition-all" style={{ width: `${odds.no}%` }} />
                           </div>
+                          {pool === 0 && market.yesProbability != null && (
+                            <p className="text-[10px] text-white/25 mt-1">{market.source}: {Math.round(market.yesProbability * 100)}% Yes (reference only)</p>
+                          )}
                         </div>
                         <div className="mt-5 flex items-center justify-between">
                           <span className="text-[11px] text-white/30">Tap to open market actions</span>
@@ -413,14 +477,28 @@ export default function Home() {
           {selectedMarket && (
             <MarketPanel
               market={selectedMarket}
-              onClose={() => setSelectedId(null)}
+              onClose={() => {
+                setSelectedId(null);
+                const url = new URL(window.location.href);
+                url.searchParams.delete('market');
+                window.history.replaceState(null, '', url.toString());
+              }}
               myYesStake={myStakes[selectedMarket.id]?.yes ?? 0}
               myNoStake={myStakes[selectedMarket.id]?.no ?? 0}
               onBetPlaced={(pos, stake) => handleBetPlaced(selectedMarket.id, pos, stake)}
             />
           )}
           <PendingTxReconciler onPendingCountChange={setPendingTxCount} />
+
+          {showSidebar && (
+            <div className="absolute top-4 right-4 w-80 z-30 space-y-3 max-h-[calc(100vh-5rem)] overflow-y-auto">
+              <RecentActivity />
+              <YourBets markets={markets} />
+            </div>
+          )}
         </div>
       </main>
+      {showHowItWorks && <HowItWorksModal onClose={() => setShowHowItWorks(false)} />}
+    </>
   );
 }
