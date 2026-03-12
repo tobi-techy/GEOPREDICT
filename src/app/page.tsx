@@ -23,7 +23,6 @@ import {
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 const STAKES_STORAGE_KEY = 'geopredict_local_stakes_v1';
-const CHAIN_TRACKED_KEY = 'geopredict_chain_tracked_v1';
 const CATEGORY_ORDER: MarketCategory[] = ['event', 'sports', 'crypto', 'environmental', 'real_estate', 'music'];
 
 type StakeByMarket = Record<string, { yes: number; no: number }>;
@@ -43,6 +42,7 @@ function hydrateApiMarket(market: ApiMarket): Market {
 
 export default function Home() {
   const [markets, setMarkets] = useState<Market[]>([]);
+  const [marketsLoaded, setMarketsLoaded] = useState(false);
   const [viewMode, setViewMode] = useState<'map' | 'grid'>('map');
   const [trackingMode, setTrackingMode] = useState<TrackingMode>(() =>
     typeof window === 'undefined' ? 'privacy' : readTrackingMode(),
@@ -108,25 +108,24 @@ export default function Home() {
         if (!res.ok) return;
         const data = (await res.json()) as ApiMarket[];
         if (!Array.isArray(data) || data.length === 0 || cancelled) return;
-        // Restore chainTracked from localStorage so previously-bet markets get fetched
-        const savedTracked = new Set<string>(JSON.parse(window.localStorage.getItem(CHAIN_TRACKED_KEY) ?? '[]'));
-        const hydrated = data.map((m) => ({ ...hydrateApiMarket(m), chainTracked: savedTracked.has(m.id) || undefined }));
-        const withTotals = await fetchAllMarketTotals(hydrated);
-        if (!cancelled) setMarkets(withTotals);
+        const hydrated = data.map(hydrateApiMarket);
+        // Show markets immediately — don't wait for on-chain data
+        if (!cancelled) { setMarkets(hydrated); setMarketsLoaded(true); }
+        // Then stream on-chain totals in as batches complete
+        await fetchAllMarketTotals(hydrated, (updated) => {
+          if (!cancelled) setMarkets(updated);
+        });
       } catch {
-        if (!cancelled) setMarkets([]);
+        if (!cancelled) { setMarkets([]); setMarketsLoaded(true); }
       }
     };
 
     void loadLiveMarkets();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   const refreshTotals = useCallback(async () => {
-    const next = await fetchAllMarketTotals(marketsRef.current);
-    setMarkets(next);
+    await fetchAllMarketTotals(marketsRef.current, (updated) => setMarkets(updated));
   }, []);
 
   useEffect(() => {
@@ -466,7 +465,11 @@ export default function Home() {
           {(viewMode === 'map' ? filteredMarkets.length === 0 : gridMarkets.length === 0) && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
               <div className="px-4 py-2 rounded-xl border border-white/[0.1] bg-zinc-950/85 text-[13px] text-white/55">
-                {viewMode === 'grid' ? 'No markets match your grid filters.' : 'No live markets available right now.'}
+                {!marketsLoaded
+                  ? 'Loading markets...'
+                  : viewMode === 'grid'
+                  ? 'No markets match your grid filters.'
+                  : 'No live markets available right now.'}
               </div>
             </div>
           )}

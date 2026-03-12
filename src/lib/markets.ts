@@ -159,8 +159,10 @@ export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: nu
   }
 }
 
-export async function fetchAllMarketTotals(markets: Market[]): Promise<Market[]> {
-  // Fetch all markets in parallel with concurrency limit
+export async function fetchAllMarketTotals(
+  markets: Market[],
+  onBatchComplete?: (updated: Market[]) => void,
+): Promise<Market[]> {
   const CONCURRENCY = 20;
   const results = [...markets];
 
@@ -177,6 +179,7 @@ export async function fetchAllMarketTotals(markets: Market[]): Promise<Market[]>
       }),
     );
     batchResults.forEach((m, j) => { results[i + j] = m; });
+    onBatchComplete?.([...results]);
   }
 
   return results;
