@@ -64,7 +64,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
   // When set, "Try Again" will re-poll for the private record then place the bet
   const [pendingConversionStake, setPendingConversionStake] = useState<number | null>(null);
   const [trackingMode, setTrackingMode] = useState<TrackingMode>('privacy');
-  const [usePrivateFee, setUsePrivateFee] = useState(false);
+  const [usePrivateFee] = useState(false);
   const [feeNotice, setFeeNotice] = useState('');
   const [needsProgramReconnect, setNeedsProgramReconnect] = useState(false);
   const appendFeeNotice = (message: string) => {
@@ -189,7 +189,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     let submittedIdForFailure: string | null = null;
     let recordsWarningNotified = false;
     try {
-      const resolveStakeRecord = async (): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number; totalPrivate: number }> => {
+      const resolveStakeRecord = async (): Promise<{ stakeRecord: unknown | null; plainCount: number; encryptedCount: number; totalPrivate: number }> => {
         const {
           encryptedRecords: nonPlainRecords,
           plaintextRecords: availableCreditsRecords,
@@ -212,7 +212,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       const waitForStakeRecord = async (
         attempts: number,
         intervalMs: number,
-      ): Promise<{ stakeRecord: string | null; plainCount: number; encryptedCount: number; totalPrivate: number }> => {
+      ): Promise<{ stakeRecord: unknown | null; plainCount: number; encryptedCount: number; totalPrivate: number }> => {
         let latest = await resolveStakeRecord();
         if (latest.stakeRecord) return latest;
         for (let i = 0; i < attempts; i += 1) {
@@ -242,33 +242,19 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
         const receiverCandidates = [`${address}.private`, address];
         for (const receiverInput of receiverCandidates) {
           try {
-            const submitConversion = async (privateFee: boolean) => executeTransaction({
-              program: 'credits.aleo',
-              function: 'transfer_public_to_private',
-              inputs: [receiverInput, `${parsedUnits}u64`],
-              fee: 50_000,
-              privateFee,
-            });
-
+            // Conversion always uses public fee — no private record exists yet to pay with
             let conversionTx;
-            try {
-              conversionTx = await withTimeout(
-                submitConversion(usePrivateFee),
-                30_000,
-                `${walletName} did not return conversion tx id in time. Waiting for wallet sync...`,
-              );
-            } catch (conversionErr) {
-              const message = conversionErr instanceof Error ? conversionErr.message : '';
-              if (!usePrivateFee || !/private fee/i.test(message)) {
-                throw conversionErr;
-              }
-              conversionTx = await withTimeout(
-                submitConversion(false),
-                30_000,
-                `${walletName} did not return conversion tx id in time. Waiting for wallet sync...`,
-              );
-              appendFeeNotice('Private fee unavailable for wallet top-up, so conversion used public fee.');
-            }
+            conversionTx = await withTimeout(
+              executeTransaction({
+                program: 'credits.aleo',
+                function: 'transfer_public_to_private',
+                inputs: [receiverInput, `${parsedUnits}u64`],
+                fee: 50_000,
+                privateFee: false,
+              }),
+              30_000,
+              `${walletName} did not return conversion tx id in time. Waiting for wallet sync...`,
+            );
             const conversionTxId = conversionTx?.transactionId ?? '';
             if (conversionTxId) {
               conversionWalletTxId = conversionTxId;
@@ -325,10 +311,10 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       }
 
       setPendingMessage('Generating ZK proof... This can take 2-5 minutes. Check Shield Wallet for status.');
-      const submitBet = async (record: string, privateFee: boolean) => executeTransaction({
+      const submitBet = async (record: unknown, privateFee: boolean) => executeTransaction({
         program: PROGRAM_ID,
         function: 'place_bet',
-        inputs: [record, market.fieldId, `${position}u8`, `${parsedUnits}u64`],
+        inputs: [record as string, market.fieldId, `${position}u8`, `${parsedUnits}u64`],
         fee: 200_000,
         privateFee,
       });
@@ -444,7 +430,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     setError('');
     setPendingMessage('Re-checking wallet for converted private record...');
     try {
-      let stakeRecord: string | null = null;
+      let stakeRecord: unknown | null = null;
       for (let i = 0; i < 40; i++) {
         const { encryptedRecords, plaintextRecords } = await (async () => {
           try { return await loadProgramRecords('credits.aleo'); } catch { return { encryptedRecords: [], plaintextRecords: [] }; }
@@ -462,7 +448,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
       const submitBet = async (privateFee: boolean) => executeTransaction({
         program: PROGRAM_ID,
         function: 'place_bet',
-        inputs: [stakeRecord!, market.fieldId, `${position}u8`, `${pendingConversionStake}u64`],
+        inputs: [stakeRecord as string, market.fieldId, `${position}u8`, `${pendingConversionStake}u64`],
         fee: 50_000,
         privateFee,
       });
@@ -526,19 +512,6 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
               )}
 
               <PrivacyIndicator context="bet" position={position} amount={stakeNum > 0 ? stakeNum : undefined} />
-
-              <label className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-                <input
-                  type="checkbox"
-                  checked={usePrivateFee}
-                  onChange={(e) => setUsePrivateFee(e.target.checked)}
-                  className="mt-0.5 accent-emerald-500"
-                />
-                <span className="text-[12px] text-white/45 leading-relaxed">
-                  Use private fee for stronger metadata privacy. If unavailable, app retries with public fee. If wallet
-                  needs an auto top-up to create a private credits record, that prep transaction may also fall back.
-                </span>
-              </label>
 
               {feeNotice && <p className="text-amber-300/80 text-[12px] text-center">{feeNotice}</p>}
               {error && <p className="text-rose-400/80 text-sm text-center">{error}</p>}

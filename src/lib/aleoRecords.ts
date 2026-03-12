@@ -104,29 +104,31 @@ export function extractRecordAmountMicrocredits(record: string): number | null {
 export function pickCreditsRecord(
   records: unknown[],
   requiredAmountMicrocredits: number,
-): string | null {
-  const normalized = records
-    .map((entry) => {
-      // Filter spent records (Shield marks them with spent: true)
-      if (isObject(entry) && entry.spent === true) return null;
-      const record = extractRecordPlaintext(entry);
-      if (!record) return null;
-      return {
-        record,
-        amount: extractRecordAmountMicrocredits(record),
-      };
-    })
-    .filter((entry): entry is { record: string; amount: number | null } => entry !== null);
+): unknown {
+  type Entry = { record: unknown; amount: number | null };
+
+  const normalized: Entry[] = records.flatMap((entry): Entry[] => {
+    if (isObject(entry) && entry.spent === true) return [];
+    // Shield object — pass through as-is, extract amount directly
+    if (isObject(entry) && typeof entry.owner === 'string' &&
+        ('microcredits' in entry || 'amount' in entry)) {
+      const raw = entry.microcredits ?? entry.amount;
+      const amount = typeof raw === 'string'
+        ? Number(raw.replace(/u64$/i, ''))
+        : typeof raw === 'number' ? raw : null;
+      return [{ record: entry, amount }];
+    }
+    const record = extractRecordPlaintext(entry);
+    if (!record) return [];
+    return [{ record, amount: extractRecordAmountMicrocredits(record) }];
+  });
 
   const sufficient = normalized
-    .filter((entry): entry is { record: string; amount: number } => entry.amount !== null && entry.amount >= requiredAmountMicrocredits)
+    .filter((e): e is { record: unknown; amount: number } => e.amount !== null && e.amount >= requiredAmountMicrocredits)
     .sort((a, b) => a.amount - b.amount);
   if (sufficient.length > 0) return sufficient[0].record;
 
-  const unknownAmount = normalized.find((entry) => entry.amount === null);
-  if (unknownAmount) return unknownAmount.record;
-
-  return null;
+  return normalized.find((e) => e.amount === null)?.record ?? null;
 }
 
 export function sumCreditsRecords(records: unknown[]): number {
