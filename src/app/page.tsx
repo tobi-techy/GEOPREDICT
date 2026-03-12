@@ -23,6 +23,7 @@ import {
 
 const Map = dynamic(() => import('@/components/Map'), { ssr: false });
 const STAKES_STORAGE_KEY = 'geopredict_local_stakes_v1';
+const CHAIN_TRACKED_KEY = 'geopredict_chain_tracked_v1';
 const CATEGORY_ORDER: MarketCategory[] = ['event', 'sports', 'crypto', 'environmental', 'real_estate', 'music'];
 
 type StakeByMarket = Record<string, { yes: number; no: number }>;
@@ -107,7 +108,9 @@ export default function Home() {
         if (!res.ok) return;
         const data = (await res.json()) as ApiMarket[];
         if (!Array.isArray(data) || data.length === 0 || cancelled) return;
-        const hydrated = data.map(hydrateApiMarket);
+        // Restore chainTracked from localStorage so previously-bet markets get fetched
+        const savedTracked = new Set<string>(JSON.parse(window.localStorage.getItem(CHAIN_TRACKED_KEY) ?? '[]'));
+        const hydrated = data.map((m) => ({ ...hydrateApiMarket(m), chainTracked: savedTracked.has(m.id) || undefined }));
         const withTotals = await fetchAllMarketTotals(hydrated);
         if (!cancelled) setMarkets(withTotals);
       } catch {

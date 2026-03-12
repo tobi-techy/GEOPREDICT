@@ -160,21 +160,24 @@ export async function fetchMarketTotals(fieldId: string): Promise<{ totalYes: nu
 }
 
 export async function fetchAllMarketTotals(markets: Market[]): Promise<Market[]> {
-  // Fetch on-chain data for top markets to detect bets and resolutions
-  const FETCH_LIMIT = 50;
-  
-  const updated = await Promise.all(
-    markets.map(async (m, idx) => {
-      // Fetch for already-tracked markets or first N markets
-      if (m.chainTracked || idx < FETCH_LIMIT) {
+  // Fetch all markets in parallel with concurrency limit
+  const CONCURRENCY = 20;
+  const results = [...markets];
+
+  for (let i = 0; i < markets.length; i += CONCURRENCY) {
+    const batch = markets.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (m) => {
         const totals = await fetchMarketTotals(m.fieldId);
         if (totals) {
           const hasActivity = totals.totalYes > 0 || totals.totalNo > 0 || totals.outcome !== 0;
           return { ...m, ...totals, chainTracked: hasActivity || m.chainTracked };
         }
-      }
-      return m;
-    }),
-  );
-  return updated;
+        return m;
+      }),
+    );
+    batchResults.forEach((m, j) => { results[i + j] = m; });
+  }
+
+  return results;
 }
