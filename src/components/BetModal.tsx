@@ -41,9 +41,11 @@ interface BetModalProps {
   position: 1 | 2;
   onClose: () => void;
   onSuccess: (stake: number) => void;
+  initialAmount?: string;
+  inline?: boolean;
 }
 
-export default function BetModal({ market, position, onClose, onSuccess }: BetModalProps) {
+export default function BetModal({ market, position, onClose, onSuccess, initialAmount, inline }: BetModalProps) {
   const {
     connected,
     wallet,
@@ -55,7 +57,7 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
     connect,
     disconnect,
   } = useWallet();
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(initialAmount ?? '');
   const [status, setStatus] = useState<'idle' | 'pending' | 'confirming' | 'success' | 'error'>('idle');
   const [pendingMessage, setPendingMessage] = useState('Submitting transaction to Aleo Testnet...');
   const [error, setError] = useState('');
@@ -474,6 +476,100 @@ export default function BetModal({ market, position, onClose, onSuccess }: BetMo
   };
 
   const isYes = position === 1;
+
+  const inner = (
+        <>
+        {status === 'idle' && (
+          <>
+            <div className="space-y-4">
+              {bettingClosed && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[12px] text-amber-200">
+                  Market is closed. Wait for resolution and claim flow.
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-white/30 uppercase tracking-wider mb-2">Amount ({TOKEN.symbol})</label>
+                <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0"
+                  disabled={bettingClosed}
+                  className="w-full bg-white/[0.03] border border-white/[0.08] rounded-2xl px-5 py-4 text-2xl font-light text-white text-center placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-all disabled:opacity-50" />
+              </div>
+
+              {payout && impact && (
+                <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06] space-y-2 text-[12px]">
+                  <div className="flex justify-between text-white/50"><span>Est. payout if you win</span><span className="text-white/90 font-medium">{formatAmount(payout.payout)}</span></div>
+                  <div className="flex justify-between text-white/50"><span>Est. profit</span><span className={payout.profit > 0 ? "text-emerald-400 font-medium" : "text-white/50"}>+{formatAmount(payout.profit)}{payout.profit === 0 && impact.poolDepth === 0 ? ' (first bet)' : ''}</span></div>
+                  <div className="flex justify-between text-white/50"><span>Your share of winner pool</span><span className="text-white/70">{payout.winnerPoolAfter > 0 ? ((stakeNum / payout.winnerPoolAfter) * 100).toFixed(1) : 100}%</span></div>
+                  <div className="flex justify-between text-white/50"><span>Loser pool to split</span><span className="text-white/70">{formatAmount(payout.loserPoolAfter)}</span></div>
+                  {impact.poolDepth === 0 && (
+                    <p className="text-[11px] text-amber-300/70 pt-1 border-t border-white/[0.04]">🎯 First bet on this market! Your profit depends on opposing bets.</p>
+                  )}
+                  <p className="text-[11px] text-white/30 pt-1 border-t border-white/[0.04]">Formula: payout = stake + (stake ÷ winner_pool) × loser_pool</p>
+                </div>
+              )}
+
+              <PrivacyIndicator context="bet" position={position} amount={stakeNum > 0 ? stakeNum : undefined} />
+
+              {feeNotice && <p className="text-amber-300/80 text-[12px] text-center">{feeNotice}</p>}
+              {error && <p className="text-rose-400/80 text-sm text-center">{error}</p>}
+              <div className="flex gap-3 pt-2">
+                {!inline && <button onClick={onClose} className="flex-1 py-4 bg-white/[0.05] hover:bg-white/[0.08] rounded-2xl font-medium text-white/60 transition-all">Cancel</button>}
+                {connected ? (
+                  <button
+                    onClick={handleBet}
+                    disabled={bettingClosed}
+                    className={`flex-1 py-4 rounded-2xl font-bold text-white transition-all disabled:opacity-50 ${isYes ? 'bg-emerald-500 hover:bg-emerald-400 text-black' : 'bg-rose-500 hover:bg-rose-400'}`}
+                  >
+                    {isYes ? `Predict Yes ${Math.round((market.yesProbability ?? 0.5) * 100)}¢` : `Predict No ${100 - Math.round((market.yesProbability ?? 0.5) * 100)}¢`}
+                  </button>
+                ) : (
+                  <div className="flex-1"><WalletMultiButton /></div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+        {status === 'pending' && <p className="text-center text-white/70 py-8">{pendingMessage}</p>}
+        {status === 'confirming' && (
+          <div className="text-center py-6">
+            <p className="text-white/70 mb-2 text-sm">{txId.startsWith('at') ? 'Finalizing...' : `Waiting for relay...`}</p>
+            {txId && <p className="text-[10px] text-white/30 font-mono break-all px-2">{txId}</p>}
+            {txId && !txId.startsWith('at') && <p className="text-[11px] text-amber-300/70 mt-2">Check your wallet for status</p>}
+            <button onClick={() => { setStatus('idle'); setError(''); }} className="mt-4 px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-xl text-sm text-white/50">Cancel</button>
+          </div>
+        )}
+        {status === 'success' && (
+          <div className="text-center py-6">
+            <p className="text-emerald-300 font-medium mb-2">✓ Bet confirmed on-chain</p>
+            {txId && (
+              <>
+                <a href={`${ALEO_API}/transaction/${txId}`} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400/70 hover:text-emerald-400 font-mono break-all px-2 underline">
+                  {txId.slice(0, 30)}…
+                </a>
+                <div className="mt-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-left">
+                  <p className="text-[10px] font-medium text-white/40 uppercase tracking-wider mb-1">🔒 ZK Proof Generated</p>
+                  <p className="text-[10px] text-white/50 leading-relaxed">Your position &amp; stake are private Aleo records.</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {status === 'error' && (
+          <div className="text-center py-6">
+            <p className="text-white font-medium text-sm">Transaction Failed</p>
+            <p className="text-white/30 text-xs mt-1">{error}</p>
+            {needsProgramReconnect && (
+              <button onClick={handleReconnectPermissions} className="mt-4 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-full text-xs text-emerald-200">Reconnect Wallet</button>
+            )}
+            {relayPendingId && (
+              <button onClick={handleRecheckOnChain} className="mt-2 px-4 py-2 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/30 rounded-full text-xs text-sky-200">Check On-Chain Again</button>
+            )}
+            <button onClick={pendingConversionStake ? handleRetryAfterConversion : () => { setPendingConversionStake(null); setStatus('idle'); }} className="mt-2 px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] rounded-full text-xs text-white/60">Try Again</button>
+          </div>
+        )}
+        </>
+  );
+
+  if (inline) return <>{inner}</>;
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-xl flex items-center justify-center z-50" onClick={onClose}>

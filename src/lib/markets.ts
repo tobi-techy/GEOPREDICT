@@ -26,6 +26,7 @@ export interface Market {
   yesProbability?: number;
   source?: 'aleo' | 'polymarket' | 'manifold' | 'news';
   sourceUrl?: string;
+  clobTokenId?: string;
   chainTracked?: boolean;
   locationConfidence?: 'high' | 'low';
 }

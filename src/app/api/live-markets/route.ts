@@ -18,6 +18,7 @@ interface PolymarketMarket {
   liquidityNum?: number;
   endDate?: string;
   slug?: string;
+  clobTokenIds?: string[];
 }
 
 interface ManifoldMarket {
@@ -196,9 +197,10 @@ function buildMarket(params: {
   deadline: Date;
   score: number;
   sourceUrl?: string;
+  clobTokenId?: string;
   locationTokens: LocationToken[];
 }): Market & { __score: number } {
-  const { source, id, question, yesProbability, deadline, score, sourceUrl, locationTokens } = params;
+  const { source, id, question, yesProbability, deadline, score, sourceUrl, clobTokenId, locationTokens } = params;
   const coords = inferCoords(question, `${source}:${id}:${question}`, locationTokens);
   const clampedProb = clamp01(yesProbability);
 
@@ -217,6 +219,7 @@ function buildMarket(params: {
     yesProbability: clampedProb,
     source,
     sourceUrl,
+    clobTokenId,
     chainTracked: false,
     locationConfidence: coords.locationConfidence,
     __score: score,
@@ -268,6 +271,7 @@ export async function GET() {
           deadline,
           score,
           sourceUrl,
+          clobTokenId: Array.isArray(m.clobTokenIds) ? m.clobTokenIds[0] : undefined,
           locationTokens,
         });
       })

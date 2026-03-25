@@ -76,7 +76,7 @@ export default function Map({ markets, onMarkerClick }: MapProps) {
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
         center: [-20, 25],
-        zoom: 1.6,
+        zoom: 2.9,
       });
       mapRef.current = map;
 
