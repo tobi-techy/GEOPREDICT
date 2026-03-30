@@ -1,54 +1,37 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
-import { useWallet } from '@provablehq/aleo-wallet-adaptor-react';
-import { WalletMultiButton } from '@provablehq/aleo-wallet-adaptor-react-ui';
+import { usePrivy } from '@privy-io/react-auth';
 
 export default function ConnectButton() {
-  const { connected, address, network } = useWallet();
-  const mounted = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
+  const { ready, authenticated, login, logout, user } = usePrivy();
 
-  const walletInstalled = (() => {
-    if (!mounted || typeof window === 'undefined') return true;
-    const w = window as Window & { leoWallet?: unknown; leo?: unknown; shield?: unknown };
-    return Boolean(w.leoWallet ?? w.leo ?? w.shield);
-  })();
+  if (!ready) return null;
 
-  const networkLabel = typeof network === 'string' ? network : network == null ? 'Testnet' : String(network);
+  if (!authenticated) {
+    return (
+      <button
+        onClick={login}
+        className="px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-400 text-[13px] font-medium text-white transition-all"
+      >
+        Sign In
+      </button>
+    );
+  }
+
+  const display = user?.google?.name
+    || user?.email?.address?.split('@')[0]
+    || user?.wallet?.address?.slice(0, 6) + '...' + user?.wallet?.address?.slice(-4)
+    || 'Connected';
 
   return (
     <div className="flex items-center gap-2">
-      {!connected && !walletInstalled && (
-        <div className="flex items-center gap-2">
-          <a
-            href="https://leo.app/"
-            target="_blank"
-            rel="noreferrer"
-            className="px-3 py-2 rounded-full border border-amber-400/30 bg-amber-500/10 text-[12px] text-amber-300 hover:bg-amber-500/20 transition-all"
-          >
-            Install Leo
-          </a>
-          <a
-            href="https://shield.app/"
-            target="_blank"
-            rel="noreferrer"
-            className="px-3 py-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 text-[12px] text-emerald-300 hover:bg-emerald-500/20 transition-all"
-          >
-            Install Shield
-          </a>
-        </div>
-      )}
-      {connected && (
-        <div className="text-[11px] text-white/50 text-right hidden sm:block">
-          <div>{networkLabel}</div>
-          <div className="font-mono">{address ? `${address.slice(0, 12)}...${address.slice(-6)}` : ''}</div>
-        </div>
-      )}
-      <WalletMultiButton />
+      <span className="text-[12px] text-white/60 hidden sm:block">{display}</span>
+      <button
+        onClick={logout}
+        className="px-3 py-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] hover:bg-white/[0.08] text-[12px] text-white/70 transition-all"
+      >
+        Sign Out
+      </button>
     </div>
   );
 }

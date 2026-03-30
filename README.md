@@ -1,47 +1,59 @@
 # GeoPredict
 
-**Privacy-preserving prediction markets on Aleo** — discover world events on a map, bet privately with zero-knowledge proofs.
+**Privacy-native prediction markets powered by FHE** — discover world events on a map, bet confidentially with encrypted on-chain positions that even the contract can't see in plaintext.
 
-## Live on Aleo Testnet
+## Live on Testnet
 
 | | |
 |---|---|
-| Program ID | `geopredict_private_v3.aleo` |
-| Deploy TX | [`at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz`](https://api.explorer.provable.com/v1/testnet/transaction/at1x9uurx3j309g9pal3fgsdqlvtywmlm0wzxupayk9ug2e0ude8gyqmgdmgz) |
-| Program URL | [Explorer](https://api.explorer.provable.com/v1/testnet/program/geopredict_private_v3.aleo) |
-| Network | Aleo Testnet |
-| Wallet | Shield Wallet / Leo Wallet |
-| Currency | Native Aleo credits (`credits.aleo`) |
+| Networks | Sepolia, Arbitrum Sepolia, Base Sepolia |
+| Encryption | Fhenix FHE (Fully Homomorphic Encryption) |
+| Auth | Privy (Google, Email, Wallet) |
+| Markets | 300+ aggregated from Polymarket & Manifold |
 
 ---
 
 ## What It Does
 
-GeoPredict aggregates 300+ live prediction markets from Polymarket and Manifold, plots them on a world map, and lets users place **private bets using Aleo's zero-knowledge infrastructure**.
+GeoPredict aggregates 300+ live prediction markets from Polymarket and Manifold, plots them on an interactive world map, and lets users place **confidential bets using Fhenix's FHE-powered smart contracts**. Positions and stake amounts are encrypted on-chain — the contract computes parimutuel payouts on data it can never see in plaintext.
 
 1. **Discover** — Browse markets on an interactive map or grid view
-2. **Bet privately** — Your position (Yes/No) and stake amount are private Aleo records
-3. **Claim privately** — Winnings are paid out as private credits with unlinkable proof hashes
-4. **Verify on-chain** — Every transaction is verifiable on Aleo testnet explorer
+2. **Bet confidentially** — Your position (Yes/No) and stake amount are encrypted on-chain using FHE
+3. **Encrypted payouts** — Parimutuel math computed on encrypted state, decryptable only by the winner
+4. **Verify on-chain** — Every transaction is verifiable on block explorers across supported testnets
+
+---
+
+## The Problem
+
+Traditional prediction markets expose every position publicly on-chain. This creates hard limits:
+
+- **MEV extraction** — Front-runners see incoming bets and sandwich them ($500M+ annual MEV losses in DeFi)
+- **Strategy leakage** — Large traders can't take positions without signaling intent to the entire market
+- **Institutional exclusion** — Compliance teams won't approve participation on fully transparent rails
+
+Existing privacy approaches (mixers, ZK proofs) either break composability or only prove correctness — they can't compute on hidden data.
+
+**FHE changes this.** The contract computes payouts on encrypted bets without ever seeing them in plaintext. Privacy becomes programmable, not just provable.
 
 ---
 
 ## Privacy Model
 
-### What's Private (ZK-protected)
+### What's Encrypted (FHE-protected)
 
-- Your bet position (Yes or No)
-- Your stake amount
-- Your `Bet` record ownership
-- Claim nonce (prevents proof hash linkage across claims)
+- Your bet position (Yes or No) — `euint8`
+- Your stake amount — `euint64`
+- Payout computation on encrypted values
+- Decryption restricted to bet owner via Fhenix permits
 
 ### What's Public (on-chain)
 
 - Market ID (for pool accounting)
-- Aggregate pool totals (`total_yes`, `total_no`)
+- Aggregate pool totals (`total_yes`, `total_no`) for price discovery
 - Market outcome after resolution
 
-This design lets the contract compute parimutuel payouts while keeping individual positions hidden.
+This design enables parimutuel payout computation while keeping individual positions confidential.
 
 ---
 
@@ -49,76 +61,69 @@ This design lets the contract compute parimutuel payouts while keeping individua
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (Next.js)                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │ Map View │  │Grid View │  │ BetModal │  │   ClaimModal     │ │
-│  │ (Mapbox) │  │          │  │          │  │                  │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘ │
-│       │             │             │                  │           │
-│       └─────────────┴─────────────┴──────────────────┘           │
-│                              │                                   │
-│                    ┌─────────▼─────────┐                         │
-│                    │  WalletProvider   │                         │
-│                    │ (Shield/Leo SDK)  │                         │
-│                    └─────────┬─────────┘                         │
-└──────────────────────────────┼───────────────────────────────────┘
+│                       Frontend (Next.js)                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐   │
+│  │ Map View │  │Grid View │  │  Trading │  │  Price Chart  │   │
+│  │ (Mapbox) │  │          │  │  Panel   │  │  Order Book   │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬───────┘   │
+│       └─────────────┴─────────────┴─────────────────┘           │
+│                              │                                  │
+│              ┌───────────────┼───────────────┐                  │
+│              │               │               │                  │
+│     ┌────────▼──────┐ ┌─────▼──────┐ ┌──────▼──────┐           │
+│     │    Privy      │ │ Cofhe SDK  │ │ Cofhe React │           │
+│     │ (Google/Email │ │ (encrypt/  │ │   hooks     │           │
+│     │  /Wallet)     │ │  decrypt)  │ │             │           │
+│     └───────────────┘ └────────────┘ └─────────────┘           │
+└──────────────────────────────┼──────────────────────────────────┘
                                │
               ┌────────────────┼────────────────┐
               │                │                │
               ▼                ▼                ▼
 ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│  Aleo Testnet   │  │   Polymarket    │  │    Manifold     │
+│  Fhenix (FHE)   │  │   Polymarket    │  │    Manifold     │
 │                 │  │   Gamma API     │  │      API        │
-│ geopredict_     │  │                 │  │                 │
-│ private_v3.aleo │  │  (market data)  │  │  (market data)  │
+│  Sepolia /      │  │                 │  │                 │
+│  Arb Sepolia /  │  │  (market data)  │  │  (market data)  │
+│  Base Sepolia   │  │                 │  │                 │
 └─────────────────┘  └─────────────────┘  └─────────────────┘
 ```
 
 ### Data Flow
 
-1. **Market ingestion**: API route fetches from Polymarket + Manifold, infers geolocation, deduplicates
-2. **Display**: Markets shown with source odds (e.g., "65% Yes on Polymarket")
-3. **Betting**: User bets go to Aleo contract — GeoPredict maintains its own on-chain pool
-4. **Pool tracking**: After first bet, market becomes "chain-tracked" and shows real on-chain totals
-5. **Claiming**: Winners claim from on-chain pool with private payout records
-
-### Key Distinction: Source Odds vs On-Chain Pool
-
-- **Source odds**: Probability from Polymarket/Manifold (informational only)
-- **GeoPredict pool**: Actual Aleo credits staked through this app (starts at 0)
-- **On-chain totals**: Real `market_totals` mapping values after bets are placed
+1. **Market ingestion** — API route fetches from Polymarket + Manifold, infers geolocation, deduplicates
+2. **Display** — Markets shown with source odds on map and grid views with trading UI
+3. **Betting** — User encrypts position + amount client-side via Cofhe SDK, submits to FHE contract
+4. **Encrypted computation** — Contract updates encrypted state, computes payouts on encrypted values
+5. **Claiming** — Winners decrypt payout using Fhenix permits, receive funds
 
 ---
 
-## Smart Contract (`geopredict_private_v3.aleo`)
+## Smart Contract (Solidity + Fhenix)
 
-### `place_bet`
-```leo
-async transition place_bet(
-    stake: credits.aleo/credits,  // private input record
-    public market_id: field,
-    position: u8,                 // private: 1=Yes, 2=No
-    amount: u64,                  // private
-) -> (Bet, credits.aleo/credits, Future)
+### `placeBet`
+```solidity
+function placeBet(
+    uint256 marketId,
+    inEuint8 encryptedPosition,  // FHE-encrypted: 1=Yes, 2=No
+    inEuint64 encryptedAmount    // FHE-encrypted stake
+) external payable
 ```
 
-### `resolve_market`
-```leo
-async transition resolve_market(
-    public market_id: field,
-    public outcome: u8            // 1=Yes won, 2=No won
-) -> Future
+### `resolveMarket`
+```solidity
+function resolveMarket(
+    uint256 marketId,
+    uint8 outcome               // 1=Yes won, 2=No won
+) external onlyOwner
 ```
-Admin-only (deployer address).
 
-### `claim_winnings`
-```leo
-async transition claim_winnings(
-    bet: Bet,                     // private record
-    public outcome: u8,
-    public expected_payout: u64,
-    claim_nonce: field,           // private, prevents linkage
-) -> (WinProof, credits.aleo/credits, Future)
+### `claimWinnings`
+```solidity
+function claimWinnings(
+    uint256 betId
+) external
+// Decrypts payout using FHE, transfers to winner
 ```
 
 ### Payout Formula (Parimutuel)
@@ -126,97 +131,56 @@ async transition claim_winnings(
 loser_share = (stake × loser_pool) / winner_pool
 payout = stake + loser_share
 ```
+Computed on encrypted values — the contract never sees individual stakes in plaintext.
 
 ---
 
-## PMF & GTM
+## Tech Stack
 
-### Product-Market Fit
-
-**Problem**: Prediction markets are powerful information aggregation tools, but existing platforms expose user positions publicly, creating privacy and regulatory concerns.
-
-**Solution**: GeoPredict brings prediction market UX to Aleo's privacy layer:
-- Bet without revealing your position to other market participants
-- Claim winnings without linking to your betting history
-- Geographic discovery makes markets more accessible than list-based UIs
-
-**Target users**:
-- Privacy-conscious traders who want prediction market exposure without public position tracking
-- Users in jurisdictions where public betting records create legal ambiguity
-- Crypto natives who value on-chain privacy as a first principle
-
-### Go-to-Market
-
-1. **Testnet phase** (current): Demonstrate working ZK prediction market on Aleo
-2. **Mainnet launch**: Deploy with real credits, focus on high-interest event categories
-3. **Market maker incentives**: Bootstrap liquidity with early adopter rewards
-4. **Oracle decentralization**: Move from admin resolution to decentralized oracle network
-
----
-
-## Changelog (Wave 1 → Wave 2)
-
-### Wave 1 Feedback
-> "Interesting interface for prediction market, might be able to gain lots of traction in times like this (war), numbers are all currently mocked on website, no actual calculation for winnings"
-
-### Wave 2 Changes
-
-| Change | Description |
-|--------|-------------|
-| **Real on-chain pools** | GeoPredict pool starts at 0, shows actual on-chain totals after bets |
-| **Source odds clarity** | UI now shows "65% Yes on Polymarket" separately from GeoPredict pool |
-| **Chain tracking** | Markets become chain-tracked after first bet, fetching real `market_totals` |
-| **Parimutuel math** | Payout preview uses real formula: `stake + (stake/winner_pool) × loser_pool` |
-| **No demo mode** | All betting/claiming paths execute real Aleo transactions |
-| **Shield Wallet** | Updated to `@provablehq/aleo-wallet-adaptor-*` packages |
-| **Native credits** | Uses `credits.aleo` instead of custom token |
-| **Deployed contract** | `geopredict_private_v3.aleo` live on testnet |
+| Layer | Technology |
+|-------|-----------|
+| Encryption | Fhenix FHE — encrypted types (`euint8`, `euint64`) and on-chain computation |
+| Client SDK | Cofhe SDK + React hooks (`useEncrypt`, `useWrite`, `useDecrypt`) |
+| Contracts | Solidity with Fhenix library on Sepolia / Arbitrum Sepolia / Base Sepolia |
+| Auth | Privy — Google, email, wallet login + embedded wallet creation |
+| Frontend | Next.js + Tailwind CSS |
+| Map | Mapbox GL JS with clustering |
+| Charts | lightweight-charts (TradingView-style) |
+| Market Data | Polymarket Gamma API + Manifold API |
 
 ---
 
 ## Running Locally
 
 ### Prerequisites
-- Node.js 20+
-- Shield Wallet or Leo Wallet browser extension
+- Node.js 20+ / Bun
 - Mapbox token (for map view)
+- Privy App ID (from [dashboard.privy.io](https://dashboard.privy.io))
 
 ### Setup
 ```bash
-npm install
-echo "NEXT_PUBLIC_MAPBOX_TOKEN=your_token" > .env.local
-npm run dev
+bun install
+cp .env.example .env
+# Add your keys to .env:
+#   NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
+#   NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### Contract Development
-```bash
-cd geopredict_contract
-leo build
-leo test
-```
-
 ---
 
-## Testing Checklist
+## Why FHE Over ZK
 
-- [ ] Connect Shield/Leo wallet
-- [ ] Map loads with clustered pins
-- [ ] Toggle Map/Grid view
-- [ ] Filter by category
-- [ ] Open market panel, see source odds
-- [ ] Place bet (requires testnet credits)
-- [ ] Verify transaction on explorer
-- [ ] After bet, market shows on-chain pool totals
+| | ZK Proofs | FHE (Fhenix) |
+|---|---|---|
+| What it does | Proves a computation was done correctly on hidden data | Computes on encrypted data without ever decrypting |
+| Privacy model | Prover knows the data, verifier doesn't | Nobody sees the data — not even the contract |
+| Composability | Limited — each proof is standalone | Full — encrypted state is programmable |
+| Use case fit | "I bet correctly" | "Compute my payout without seeing my bet" |
 
----
-
-## Current Limitations
-
-- **Oracle**: Resolution is admin-driven (deployer address), not decentralized
-- **Record fragmentation**: Large bets may fail if wallet has many small records
-- **Geolocation**: Inferred from market text, some pins are approximate
+For prediction markets, FHE is the right primitive because the contract needs to **compute** on positions (calculate payouts), not just **verify** them.
 
 ---
 
@@ -229,18 +193,26 @@ GEOPREDICT/
 │   │   ├── api/live-markets/    # Market ingestion from Polymarket + Manifold
 │   │   └── page.tsx             # Main UI
 │   ├── components/
-│   │   ├── WalletProvider.tsx   # Shield/Leo wallet config
+│   │   ├── PrivyProvider.tsx    # Privy auth config (Google/email/wallet)
+│   │   ├── ConnectButton.tsx    # Privy login/logout
 │   │   ├── Map.tsx              # Mapbox with clustering
-│   │   ├── MarketPanel.tsx      # Market details + actions
-│   │   ├── BetModal.tsx         # Private bet flow
-│   │   └── ClaimModal.tsx       # Private claim flow
+│   │   ├── MarketPanel.tsx      # Market details + trading interface
+│   │   ├── PriceChart.tsx       # TradingView-style chart
+│   │   ├── OrderBook.tsx        # Yes/No depth visualization
+│   │   ├── BetModal.tsx         # Encrypted bet flow
+│   │   └── ClaimModal.tsx       # Encrypted claim flow
 │   └── lib/
-│       ├── markets.ts           # Types, odds math, chain reads
-│       ├── aleoRecords.ts       # Wallet record parsing
-│       └── token.ts             # Credits conversions
-└── geopredict_contract/
-    └── src/main.leo             # Aleo program (v3)
+│       └── markets.ts           # Types, odds math
+└── contracts/                   # Fhenix FHE smart contracts (Solidity)
 ```
+
+---
+
+## Buildathon Track
+
+**Confidential DeFi** — Private positions, sealed-bid mechanics, MEV-protected execution.
+
+GeoPredict demonstrates that FHE enables a category of DeFi applications that transparent chains and ZK proofs alone cannot support: markets where the contract computes payouts on encrypted bets without any party — including the contract itself — ever seeing individual positions in plaintext.
 
 ---
 

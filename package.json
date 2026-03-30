@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@privy-io/react-auth": "^3.18.0",
     "@provablehq/aleo-types": "latest",
     "@provablehq/aleo-wallet-adaptor-core": "latest",
     "@provablehq/aleo-wallet-adaptor-leo": "^0.3.0-alpha.3",
@@ -19,6 +20,7 @@
     "mapbox-gl": "^3.18.1",
     "next": "16.1.5",
     "react": "19.2.3",
+    "react-candlestick-chart": "^1.0.19",
     "react-dom": "19.2.3"
   },
   "devDependencies": {

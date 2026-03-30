@@ -10,8 +10,7 @@ import RecentActivity from '@/components/RecentActivity';
 import YourBets from '@/components/YourBets';
 import HowItWorksModal from '@/components/HowItWorksModal';
 import Countdown from '@/components/Countdown';
-import { TOKEN } from '@/lib/token';
-import { ALEO_API, DEPLOYED_PROGRAM, DEPLOY_TX_ID, type Market, type MarketCategory, CATEGORY_LABELS, calcOdds, fetchAllMarketTotals, formatAmount } from '@/lib/markets';
+import { type Market, type MarketCategory, CATEGORY_LABELS, calcOdds, fetchAllMarketTotals, formatAmount } from '@/lib/markets';
 import {
   countPendingTransactions,
   PENDING_TX_EVENT,
@@ -223,77 +222,30 @@ export default function Home() {
   return (
     <>
       <main className="h-screen flex flex-col bg-zinc-950">
-        <header className="h-16 border-b border-white/[0.06] flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-xl z-10">
+        <header className="h-14 border-b border-white/[0.06] flex items-center justify-between px-5 bg-zinc-950/80 backdrop-blur-xl z-10">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-              <span className="text-sm">🗺</span>
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+              <span className="text-xs">🗺</span>
             </div>
             <span className="text-[15px] font-semibold text-white tracking-tight">GeoPredict</span>
-            <span className="text-[11px] text-white/35">{TOKEN.symbol} on Aleo Testnet</span>
-            <span className="text-[11px] text-emerald-300/70">{filteredMarkets.length}/{markets.length} live markets</span>
-            <span className="text-[11px] text-white/35">Map pins: {mapMarkets.length}</span>
-            <a
-              href={`${ALEO_API}/program/${DEPLOYED_PROGRAM}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-white/45 hover:text-white/70 underline underline-offset-2"
-            >
-              {DEPLOYED_PROGRAM}
-            </a>
-            <a
-              href={`${ALEO_API}/transaction/${DEPLOY_TX_ID}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-white/45 hover:text-white/70 underline underline-offset-2"
-            >
-              Deploy Tx
-            </a>
+            <span className="text-[11px] text-white/35 hidden sm:inline">{filteredMarkets.length} markets</span>
           </div>
-          <div className="flex items-center gap-3">
-            <select
-              value={trackingMode}
-              onChange={(e) => handleTrackingModeChange(e.target.value as TrackingMode)}
-              className="rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-[12px] text-white/70 outline-none focus:border-emerald-400/40"
-              title="Transaction tracking mode"
-            >
-              <option value="privacy">Tracking: Privacy</option>
-              <option value="reliability">Tracking: Reliability</option>
-            </select>
-            {pendingTxCount > 0 && (
-              <button
-                onClick={() => {
-                  if (confirm(`Clear ${pendingTxCount} pending transaction(s)? This only clears local tracking - check your wallet for actual status.`)) {
-                    window.localStorage.removeItem('geopredict_pending_txs_v1');
-                    setPendingTxCount(0);
-                    window.dispatchEvent(new CustomEvent('geopredict:pending-transactions-changed'));
-                  }
-                }}
-                className="px-3 py-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 text-[12px] text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer"
-              >
-                Pending tx: {pendingTxCount} ✕
-              </button>
-            )}
-            <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-1">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] p-0.5">
               <button
                 onClick={() => setViewMode('map')}
-                className={`px-3 py-1.5 rounded-full text-[12px] transition-all ${viewMode === 'map' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:text-white/80'}`}
+                className={`px-3 py-1 rounded-full text-[12px] transition-all ${viewMode === 'map' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:text-white/80 border border-transparent'}`}
               >
                 Map
               </button>
               <button
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 rounded-full text-[12px] transition-all ${viewMode === 'grid' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:text-white/80'}`}
+                className={`px-3 py-1 rounded-full text-[12px] transition-all ${viewMode === 'grid' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-white/60 hover:text-white/80 border border-transparent'}`}
               >
                 Grid
               </button>
             </div>
-            <button onClick={() => setShowVerify(!showVerify)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
-              Verify Proof
-            </button>
-            <button onClick={() => setShowHowItWorks(true)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
-              How it works
-            </button>
-            <button onClick={() => setShowSidebar(!showSidebar)} className="px-4 py-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[13px] font-medium text-white/60 transition-all">
+            <button onClick={() => setShowSidebar(!showSidebar)} className="px-3 py-1.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-full text-[12px] text-white/60 transition-all">
               Activity
             </button>
             <ConnectButton />

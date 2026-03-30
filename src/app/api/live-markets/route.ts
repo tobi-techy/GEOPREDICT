@@ -260,7 +260,7 @@ export async function GET() {
 
         const score = Number(m.volumeNum ?? 0) + Number(m.liquidityNum ?? 0);
         const notionalPool = Number(m.volumeNum ?? 0) || Number(m.liquidityNum ?? 0) || 0;
-        const sourceUrl = m.slug ? `https://polymarket.com/event/${m.slug}` : undefined;
+        const sourceUrl = m.slug ? `https://polymarket.com/market/${m.slug}` : undefined;
 
         return buildMarket({
           source: 'polymarket',
